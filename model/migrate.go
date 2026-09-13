@@ -139,8 +139,11 @@ func DbPath() string {
 	if dbPath == "" {
 		dbPath = "data/isley.db"
 	}
-	//return "data/isley.db?_journal_mode=WAL"
-	return dbPath + "?_journal_mode=WAL"
+	// busy_timeout(5000): without it, SQLite's default busy timeout is 0,
+	// so any write that overlaps a background job (sensor polling, hourly
+	// rollups, pruning) fails immediately with "database is locked"
+	// instead of waiting briefly for the other writer to finish.
+	return dbPath + "?_journal_mode=WAL&_pragma=busy_timeout(5000)"
 }
 
 func MigrateDB() {
