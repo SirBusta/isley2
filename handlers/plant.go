@@ -277,8 +277,11 @@ func CreateNewStrain(db *sql.DB, store *config.Store, newStrain *struct {
 
 	// Insert the new strain into the `strain` table
 	var id int
-	// Use numeric autoflower flag to be consistent with other handlers
-	autoflowerInt := 1 // default true
+	// Use numeric autoflower flag to be consistent with other handlers.
+	// Defaults to photoperiod (0): most strains are photoperiod, and there
+	// is currently no UI to set this when creating a strain inline from
+	// the Add Plant form (see TODO.md).
+	autoflowerInt := 0 // default false (photoperiod)
 	err := db.QueryRow(
 		`INSERT INTO strain (name, breeder_id, sativa, indica, autoflower, description, seed_count)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
