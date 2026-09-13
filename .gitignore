@@ -7,6 +7,7 @@
 /output/
 /.env
 /TODO.md
+/LOCAL_CHANGELOG.md
 /audits/
 /.claude/
 /CLAUDE.md
