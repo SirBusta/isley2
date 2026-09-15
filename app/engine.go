@@ -90,7 +90,12 @@ func NewEngine(cfg Config) (*gin.Engine, error) {
 		_ = r.SetTrustedProxies(nil)
 	}
 
-	r.Use(gin.Recovery())
+	// gin.Recovery()'s default writer is disconnected from logger.Log, so a
+	// recovered panic previously only reached stdout/stderr (e.g. `docker
+	// logs`) and never Isley's own logs/app.log — invisible in the
+	// Settings -> Logs viewer. Route it through logger.Log at Error level
+	// so panics land wherever every other error already does.
+	r.Use(gin.RecoveryWithWriter(logger.Log.WriterLevel(logrus.ErrorLevel)))
 	r.Use(gin.LoggerWithWriter(logger.AccessWriter))
 	r.Use(securityHeadersMiddleware(configStore, hstsHeaderValue(cfg)))
 	r.Use(currentPathMiddleware())
