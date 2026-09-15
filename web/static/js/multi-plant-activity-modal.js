@@ -12,8 +12,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     activitySelect.addEventListener("change", updateMeasurementInputs);
 
-    // Set default date/time when the modal is shown
+    // Reset the form and set default date/time when the modal is shown.
+    // Browsers restore form field values across a plain page reload, so
+    // without this the note field comes back populated with whatever was
+    // last typed before the page reloaded on a previous successful save.
     addMultiPlantActivityModal.addEventListener("show.bs.modal", () => {
+        form.reset();
         formHelpers.setDateTimeNow("activityMultiDate");
         updateMeasurementInputs();
     });

@@ -3,8 +3,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const addMeasurementModal = document.getElementById("addMeasurementModal");
     const measurementDateInput = document.getElementById("measureDate");
 
-    // Set default date/time when the modal is shown
+    // Reset the form and set default date/time when the modal is shown.
+    // Browsers restore form field values across a plain page reload, so
+    // without this the value field comes back populated with whatever was
+    // last entered before the page reloaded on a previous successful save.
     addMeasurementModal.addEventListener("show.bs.modal", () => {
+        form.reset();
         formHelpers.setDateTimeNow("measureDate");
     });
 

@@ -12,8 +12,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
     activitySelect.addEventListener("change", updateMeasurementInputs);
 
-    // Set default date/time when the modal is shown
+    // Reset the form and set default date/time when the modal is shown.
+    // Browsers restore form field values across a plain page reload (not
+    // just back/forward navigation), so without this the note textarea
+    // comes back populated with whatever was last typed before the page
+    // reloaded on a previous successful save.
     addActivityModal.addEventListener("show.bs.modal", () => {
+        form.reset();
         formHelpers.setDateTimeNow("activityDate");
         updateMeasurementInputs();
     });
