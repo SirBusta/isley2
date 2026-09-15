@@ -510,6 +510,8 @@ api_cannot_delete_last_status: "Die letzte Status-Eintragung einer Pflanze kann 
 api_database_error: "Datenbankfehler"
 api_database_query_error: "Datenbankabfragefehler"
 api_zone_creation_failed: "Zone konnte nicht erstellt werden"
+api_zone_required: "Bitte wähle eine Zone aus oder wähle \"Neue Zone hinzufügen\" und gib einen Namen ein"
+api_strain_required: "Bitte wähle eine Sorte aus oder wähle \"Neue Sorte hinzufügen\" und gib einen Namen ein"
 api_ecowitt_sensors_scanned: "EcoWitt-Sensoren gescannt und hinzugefügt"
 api_failed_to_add_activity: "Aktivität konnte nicht hinzugefügt werden"
 api_failed_to_add_breeder: "Züchter konnte nicht hinzugefügt werden"

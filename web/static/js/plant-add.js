@@ -106,6 +106,25 @@ document.addEventListener("DOMContentLoaded", () => {
     addPlantForm.addEventListener("submit", (e) => {
         e.preventDefault();
 
+        formHelpers.clearFieldError(zoneAC.input);
+        formHelpers.clearFieldError(strainAC.input);
+
+        // The autocomplete only sets zoneSelect/strainSelect's value when an
+        // existing item or "Add New" is explicitly chosen from its dropdown.
+        // Typing a name and clicking away without picking anything leaves it
+        // blank, which previously reached the server as neither an existing
+        // ID nor new-item data and crashed the handler.
+        let hasError = false;
+        if (zoneSelect.value === "") {
+            formHelpers.setFieldError(zoneAC.input, uiMessages.t('api_zone_required'));
+            hasError = true;
+        }
+        if (strainSelect.value === "") {
+            formHelpers.setFieldError(strainAC.input, uiMessages.t('api_strain_required'));
+            hasError = true;
+        }
+        if (hasError) return;
+
         const submitBtn = addPlantForm.querySelector('button[type="submit"]');
         submitBtn.classList.add("is-loading");
         submitBtn.disabled = true;

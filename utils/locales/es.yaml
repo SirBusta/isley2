@@ -508,6 +508,8 @@ api_cannot_delete_last_status: "No se puede eliminar la última entrada de estad
 api_database_error: "Error de base de datos"
 api_database_query_error: "Error en la consulta de base de datos"
 api_zone_creation_failed: "Error al crear la nueva zona"
+api_zone_required: "Selecciona una zona, o elige \"Añadir nueva zona\" e ingresa un nombre"
+api_strain_required: "Selecciona una variedad, o elige \"Añadir nueva variedad\" e ingresa un nombre"
 api_ecowitt_sensors_scanned: "Sensores EcoWitt escaneados y añadidos"
 api_failed_to_add_activity: "No se pudo agregar la actividad"
 api_failed_to_add_breeder: "No se pudo agregar el criador"

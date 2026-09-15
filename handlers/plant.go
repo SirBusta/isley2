@@ -78,6 +78,19 @@ func AddPlant(c *gin.Context) {
 		input.StrainID = &strainID // Set the created strain ID
 	}
 
+	// input.ZoneID/StrainID are dereferenced below; neither the client nor
+	// the two create-new branches above are guaranteed to have set them
+	// (e.g. the client sent neither an existing ID nor new-zone/new-strain
+	// data), so guard explicitly rather than risk a nil pointer panic.
+	if input.ZoneID == nil {
+		apiBadRequest(c, "api_zone_required")
+		return
+	}
+	if input.StrainID == nil {
+		apiBadRequest(c, "api_strain_required")
+		return
+	}
+
 	// Insert plant, decrement seed count, and create initial status log
 	// inside a transaction so partial writes cannot occur.
 	tx, err := db.Begin()
