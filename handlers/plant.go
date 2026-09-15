@@ -68,6 +68,18 @@ func AddPlant(c *gin.Context) {
 
 	// Handle new strain creation
 	if input.StrainID == nil && input.NewStrain != nil {
+		// A strain with neither an existing nor a new breeder inserts with
+		// breeder_id 0, which matches no real breeder row. GetStrains/
+		// GetPlant LEFT JOIN to breeder and scan the joined name/id as
+		// plain (non-nullable) fields, so that strain would break both
+		// with a "converting NULL to ..." scan error the moment anything
+		// tries to read it back. The dedicated Add Strain form already
+		// requires a breeder (AddStrainHandler); enforce the same rule
+		// here instead of silently producing a broken strain.
+		if input.NewStrain.BreederId == 0 && input.NewStrain.NewBreeder == "" {
+			apiBadRequest(c, "api_new_breeder_name_required")
+			return
+		}
 		// Insert new strain into the database
 		strainID, err := CreateNewStrain(db, store, input.NewStrain)
 		if err != nil {
@@ -373,9 +385,15 @@ func GetPlant(db *sql.DB, id string) types.Plant {
 		orderByExpr = "strftime('%s', psl.date)"
 	}
 
+	// strain_name/breeder_name/zone_name are coalesced because a plant
+	// whose strain/breeder/zone reference doesn't match any row (as with
+	// the strain-with-no-breeder bug below) otherwise LEFT JOINs to NULL,
+	// which fails to scan into these non-nullable string fields and
+	// previously blanked the entire plant record rather than just the
+	// missing field.
 	query := fmt.Sprintf(`
 		SELECT p.id, p.name, p.description, p.clone, p.start_dt,
-			   s.name AS strain_name, b.name AS breeder_name, z.name AS zone_name, z.id AS zone_id,
+			   COALESCE(s.name, '') AS strain_name, COALESCE(b.name, '') AS breeder_name, COALESCE(z.name, '') AS zone_name, z.id AS zone_id,
 			   (SELECT ps.status
 				FROM plant_status_log psl
 				LEFT OUTER JOIN plant_status ps ON psl.status_id = ps.id
@@ -990,6 +1008,13 @@ func UpdatePlant(c *gin.Context) {
 
 	// Handle new strain creation
 	if input.StrainID == nil && input.NewStrain != nil {
+		// See the matching guard in AddPlant: a strain with neither an
+		// existing nor a new breeder breaks GetStrains/GetPlant's
+		// breeder LEFT JOIN scan.
+		if input.NewStrain.BreederId == 0 && input.NewStrain.NewBreeder == "" {
+			apiBadRequest(c, "api_new_breeder_name_required")
+			return
+		}
 		// Insert new strain into the database
 		strainID, err := CreateNewStrain(db, store, input.NewStrain)
 		if err != nil {

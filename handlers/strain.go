@@ -183,7 +183,12 @@ func validateStrainFields(name, description, shortDesc, newBreeder, strainURL st
 func GetStrains(db *sql.DB) []types.Strain {
 	fieldLogger := logger.Log.WithField("func", "GetStrains")
 
-	rows, err := db.Query("SELECT s.id, s.name, b.id as breeder_id, b.name as breeder, s.indica, s.sativa, s.autoflower, s.description, coalesce(s.short_desc, ''), s.seed_count FROM strain s left outer join breeder b on s.breeder_id = b.id ORDER BY s.name ASC")
+	// breeder_id/breeder are coalesced because a strain with no matching
+	// breeder row (e.g. breeder_id 0, or a breeder deleted out from under
+	// it) otherwise LEFT JOINs to NULL, which fails to scan into the
+	// non-nullable int/string fields below and previously blanked the
+	// entire strain list rather than just that one row.
+	rows, err := db.Query("SELECT s.id, s.name, coalesce(b.id, 0) as breeder_id, coalesce(b.name, '') as breeder, s.indica, s.sativa, s.autoflower, s.description, coalesce(s.short_desc, ''), s.seed_count FROM strain s left outer join breeder b on s.breeder_id = b.id ORDER BY s.name ASC")
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to query strains")
 		return nil

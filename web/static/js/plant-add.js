@@ -24,9 +24,22 @@ document.addEventListener("DOMContentLoaded", () => {
         newZoneInput.classList.toggle("d-none", zoneSelect.value !== "new");
     });
 
+    // Show/Hide New Breeder Input to match breederSelect's current value.
+    // Called both on breederSelect's own change AND whenever the New
+    // Strain card is revealed, because when there are zero breeders yet
+    // "Add New Breeder" is the sole/default <option> — the select is
+    // already on "new" without the user ever changing it, so a
+    // change-only listener never fires and the input stayed hidden.
+    function syncNewBreederInput() {
+        newBreederInput.classList.toggle("d-none", breederSelect.value !== "new");
+    }
+
     // Show/Hide New Strain Card
     strainSelect.addEventListener("change", () => {
         newStrainCard.classList.toggle("d-none", strainSelect.value !== "new");
+        if (strainSelect.value === "new") {
+            syncNewBreederInput();
+        }
 
         // Load parent plants for selected strain
         if (strainSelect.value !== "new" && strainSelect.value) {
@@ -48,7 +61,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Show/Hide New Breeder Input
     breederSelect.addEventListener("change", () => {
-        newBreederInput.classList.toggle("d-none", breederSelect.value !== "new");
+        syncNewBreederInput();
     });
 
     // Show/Hide Parent Plant Dropdown

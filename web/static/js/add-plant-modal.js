@@ -90,23 +90,32 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     });
 
+    // Show/Hide New Breeder Input to match breederSelect's current value.
+    // Also called when the New Strain inputs are revealed, because when
+    // there are zero breeders yet "Add New Breeder" is the sole/default
+    // <option> — the select is already on "new" without the user ever
+    // changing it, so a change-only listener never fires and the input
+    // stayed hidden.
+    const syncNewBreederInput = () => {
+        if (breederSelect.value === "new") {
+            newBreederInput.classList.remove("d-none");
+        } else {
+            newBreederInput.classList.add("d-none");
+        }
+    };
+
     // Show/Hide New Strain Inputs
     strainSelect.addEventListener("change", () => {
         if (strainSelect.value === "new") {
             newStrainInputs.classList.remove("d-none");
+            syncNewBreederInput();
         } else {
             newStrainInputs.classList.add("d-none");
         }
     });
 
     // Show/Hide New Breeder Input
-    breederSelect.addEventListener("change", () => {
-        if (breederSelect.value === "new") {
-            newBreederInput.classList.remove("d-none");
-        } else {
-            newBreederInput.classList.add("d-none");
-        }
-    });
+    breederSelect.addEventListener("change", syncNewBreederInput);
 
     addPlantModal.addEventListener("show.bs.modal", () => {
         resetZoneSelection();
