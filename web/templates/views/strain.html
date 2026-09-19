@@ -27,6 +27,11 @@
                 <i class="fa-solid fa-database me-1"></i>{{ .lcl.view_on_cannadb }} <i class="fa-solid fa-arrow-up-right-from-square fa-xs"></i>
             </a>
             {{ end }}
+            {{ if .straincompassURL }}
+            <a href="{{ .straincompassURL }}" target="_blank" rel="noopener" class="badge bg-secondary text-decoration-none mt-2 ms-1">
+                <i class="fa-solid fa-flask me-1"></i>{{ .lcl.view_on_straincompass }} <i class="fa-solid fa-arrow-up-right-from-square fa-xs"></i>
+            </a>
+            {{ end }}
         </div>
         {{ if .loggedIn }}
         <a href="/strain/{{ .strain.ID }}/edit" class="btn btn-primary">
@@ -66,6 +71,11 @@
                             <i class="fa-solid fa-sun me-1"></i> Photoperiod
                         </span>
                         {{ end }}
+                        {{ if boolPtr .strain.StraincompassVerified }}
+                        <span class="badge bg-success ms-1" title="{{ .lcl.straincompass_verified_desc }}">
+                            <i class="fa-solid fa-circle-check me-1"></i>{{ .lcl.straincompass_verified }}
+                        </span>
+                        {{ end }}
                     </div>
 
                     <!-- Indica / Sativa ratio bar -->
@@ -89,6 +99,36 @@
                             </small>
                         </div>
                     </div>
+
+                    {{ if or .strain.ThcMax .strain.CbdMax }}
+                    <!-- Cannabinoids (StrainCompass) -->
+                    <div class="strain-cannabinoid-section mb-3">
+                        {{ if .strain.ThcMax }}
+                        <div class="d-flex justify-content-between">
+                            <small class="fw-semibold">THC</small>
+                            <small>{{ if .strain.ThcMin }}{{ .strain.ThcMin }}–{{ end }}{{ .strain.ThcMax }}%</small>
+                        </div>
+                        {{ end }}
+                        {{ if .strain.CbdMax }}
+                        <div class="d-flex justify-content-between">
+                            <small class="fw-semibold">CBD</small>
+                            <small>{{ if .strain.CbdMin }}{{ .strain.CbdMin }}–{{ end }}{{ .strain.CbdMax }}%</small>
+                        </div>
+                        {{ end }}
+                        {{ if .strain.CbnMax }}
+                        <div class="d-flex justify-content-between">
+                            <small class="fw-semibold">CBN</small>
+                            <small>{{ .strain.CbnMax }}%</small>
+                        </div>
+                        {{ end }}
+                        {{ if .strain.CbgMax }}
+                        <div class="d-flex justify-content-between">
+                            <small class="fw-semibold">CBG</small>
+                            <small>{{ .strain.CbgMax }}%</small>
+                        </div>
+                        {{ end }}
+                    </div>
+                    {{ end }}
 
                     <hr>
 
@@ -138,8 +178,56 @@
                     <div id="lineageEmpty" class="text-center text-muted py-2" style="display:none;">
                         <small>No lineage data recorded.</small>
                     </div>
+                    {{ if .strain.StraincompassLineageNote }}
+                    <p class="small text-muted mt-2 mb-0">
+                        {{ .lcl.straincompass_lineage_label }}: {{ .strain.StraincompassLineageNote }}
+                    </p>
+                    {{ end }}
                 </div>
             </div>
+
+            {{ if or .strain.Effects .strain.Flavors .strain.Terpenes .strain.MedicalUses }}
+            <!-- Effects / Flavors / Terpenes / Medical Uses (StrainCompass) -->
+            <div class="card strain-infobox mt-3" id="strainAttributesCard">
+                <div class="card-body">
+                    <h2 class="h5 card-title text-primary text-center mb-3">
+                        <i class="fa-solid fa-flask me-1"></i> {{ .lcl.straincompass_attributes_title }}
+                    </h2>
+                    {{ if .strain.Effects }}
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">{{ .lcl.straincompass_effects }}</small>
+                        {{ range .strain.Effects }}
+                        <span class="badge bg-info me-1 mb-1">{{ .Name }}</span>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                    {{ if .strain.Flavors }}
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">{{ .lcl.straincompass_flavors }}</small>
+                        {{ range .strain.Flavors }}
+                        <span class="badge bg-warning text-dark me-1 mb-1">{{ .Name }}</span>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                    {{ if .strain.Terpenes }}
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">{{ .lcl.straincompass_terpenes }}</small>
+                        {{ range .strain.Terpenes }}
+                        <span class="badge bg-primary me-1 mb-1">{{ .Name }}</span>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                    {{ if .strain.MedicalUses }}
+                    <div class="mb-0">
+                        <small class="text-muted d-block mb-1">{{ .lcl.straincompass_medical_uses }}</small>
+                        {{ range .strain.MedicalUses }}
+                        <span class="badge bg-secondary me-1 mb-1">{{ .Name }}</span>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                </div>
+            </div>
+            {{ end }}
 
             <!-- Descendants box -->
             <div class="card strain-infobox mt-3" id="descendantsCard" style="display:none;">

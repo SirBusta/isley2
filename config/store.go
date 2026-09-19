@@ -18,29 +18,32 @@ import (
 type Store struct {
 	mu sync.RWMutex
 
-	pollingInterval    int
-	aciEnabled         int
-	ecEnabled          int
-	aciToken           string
-	ecDevices          []string
-	activities         []types.Activity
-	metrics            []types.Metric
-	statuses           []types.Status
-	zones              []types.Zone
-	strains            []types.Strain
-	breeders           []types.Breeder
-	streams            []types.Stream
-	sensorRetention    int
-	guestMode          int
-	streamGrabEnabled  int
-	streamGrabInterval int
-	apiKey             string
-	apiIngestEnabled   int
-	logLevel           string
-	maxBackupSize      int64
-	timezone           string
-	cannadbEnabled     int
-	cannadbBaseURL     string
+	pollingInterval      int
+	aciEnabled           int
+	ecEnabled            int
+	aciToken             string
+	ecDevices            []string
+	activities           []types.Activity
+	metrics              []types.Metric
+	statuses             []types.Status
+	zones                []types.Zone
+	strains              []types.Strain
+	breeders             []types.Breeder
+	streams              []types.Stream
+	sensorRetention      int
+	guestMode            int
+	streamGrabEnabled    int
+	streamGrabInterval   int
+	apiKey               string
+	apiIngestEnabled     int
+	logLevel             string
+	maxBackupSize        int64
+	timezone             string
+	cannadbEnabled       int
+	cannadbBaseURL       string
+	straincompassEnabled int
+	straincompassBaseURL string
+	straincompassAPIKey  string
 }
 
 // Defaults mirrors the historical package-global initial values. Tests
@@ -210,6 +213,42 @@ func (s *Store) SetCannadbBaseURL(v string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.cannadbBaseURL = v
+}
+
+func (s *Store) StraincompassEnabled() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.straincompassEnabled
+}
+
+func (s *Store) SetStraincompassEnabled(v int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.straincompassEnabled = v
+}
+
+func (s *Store) StraincompassBaseURL() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.straincompassBaseURL
+}
+
+func (s *Store) SetStraincompassBaseURL(v string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.straincompassBaseURL = v
+}
+
+func (s *Store) StraincompassAPIKey() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.straincompassAPIKey
+}
+
+func (s *Store) SetStraincompassAPIKey(v string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.straincompassAPIKey = v
 }
 
 func (s *Store) LogLevel() string {

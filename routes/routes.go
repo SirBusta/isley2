@@ -119,20 +119,21 @@ func AddBasicRoutes(r *gin.RouterGroup, version string) {
 		currentPath, _ := c.Get("currentPath")
 		store := handlers.ConfigStoreFromContext(c)
 		c.HTML(http.StatusOK, "views/strains.html", gin.H{
-			"title":           "Strains",
-			"currentPath":     currentPath,
-			"version":         version,
-			"strains":         store.Strains(),
-			"breeders":        store.Breeders(),
-			"plants":          handlers.GetLivingPlants(handlers.DBFromContext(c)),
-			"activities":      store.Activities(),
-			"loggedIn":        sessions.Default(c).Get("logged_in"),
-			"cannadbEnabled":  store.CannadbEnabled() == 1,
-			"lcl":             translations,
-			"languages":       utils.AvailableLanguages,
-			"currentLanguage": lang,
-			"csrfToken":       c.GetString("csrf_token"),
-			"cspNonce":        c.GetString("cspNonce"),
+			"title":                "Strains",
+			"currentPath":          currentPath,
+			"version":              version,
+			"strains":              store.Strains(),
+			"breeders":             store.Breeders(),
+			"plants":               handlers.GetLivingPlants(handlers.DBFromContext(c)),
+			"activities":           store.Activities(),
+			"loggedIn":             sessions.Default(c).Get("logged_in"),
+			"cannadbEnabled":       store.CannadbEnabled() == 1,
+			"straincompassEnabled": store.StraincompassEnabled() == 1,
+			"lcl":                  translations,
+			"languages":            utils.AvailableLanguages,
+			"currentLanguage":      lang,
+			"csrfToken":            c.GetString("csrf_token"),
+			"cspNonce":             c.GetString("cspNonce"),
 		})
 	})
 
@@ -253,18 +254,19 @@ func AddBasicRoutes(r *gin.RouterGroup, version string) {
 		store := handlers.ConfigStoreFromContext(c)
 		strain := handlers.GetStrain(handlers.DBFromContext(c), c.Param("id"))
 		c.HTML(http.StatusOK, "views/strain.html", gin.H{
-			"title":           "Strain Details",
-			"currentPath":     currentPath,
-			"version":         version,
-			"strain":          strain,
-			"cannadbURL":      handlers.CannadbWebURL(strain.CannadbURI),
-			"breeders":        store.Breeders(),
-			"loggedIn":        sessions.Default(c).Get("logged_in"),
-			"lcl":             translations,
-			"languages":       utils.AvailableLanguages,
-			"currentLanguage": lang,
-			"csrfToken":       c.GetString("csrf_token"),
-			"cspNonce":        c.GetString("cspNonce"),
+			"title":            "Strain Details",
+			"currentPath":      currentPath,
+			"version":          version,
+			"strain":           strain,
+			"cannadbURL":       handlers.CannadbWebURL(strain.CannadbURI),
+			"straincompassURL": handlers.StraincompassWebURL(strain.StraincompassSlug),
+			"breeders":         store.Breeders(),
+			"loggedIn":         sessions.Default(c).Get("logged_in"),
+			"lcl":              translations,
+			"languages":        utils.AvailableLanguages,
+			"currentLanguage":  lang,
+			"csrfToken":        c.GetString("csrf_token"),
+			"cspNonce":         c.GetString("cspNonce"),
 		})
 	})
 
@@ -328,6 +330,12 @@ func AddProtectedApiRoutes(r *gin.RouterGroup) {
 	// users can't drive outbound calls against the shared per-IP rate budget.
 	r.GET("/strains/cannadb/search", handlers.CannadbSearchHandler)
 	r.POST("/strains/cannadb/import", handlers.CannadbImportHandler)
+
+	// StrainCompass import (search + one-click import). Auth-gated for the
+	// same reason as CannaDB above: anonymous users must not be able to
+	// drive outbound calls against a shared per-key/per-IP rate budget.
+	r.GET("/strains/straincompass/search", handlers.StraincompassSearchHandler)
+	r.POST("/strains/straincompass/import", handlers.StraincompassImportHandler)
 
 	// Lineage (protected write)
 	r.POST("/strains/:id/lineage", handlers.AddLineageHandler)

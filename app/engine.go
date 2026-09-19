@@ -381,6 +381,11 @@ func buildFuncMap(store *config.Store) template.FuncMap {
 		"upper":     strings.ToUpper,
 		"lower":     strings.ToLower,
 		"hasPrefix": strings.HasPrefix,
+		// boolPtr dereferences a *bool for use in {{if}}, since a non-nil
+		// pointer is always "truthy" to text/template regardless of the
+		// value it points to — needed for tri-state (nil/false/true)
+		// fields like Strain.StraincompassVerified.
+		"boolPtr": func(b *bool) bool { return b != nil && *b },
 		"default": func(val interface{}, def string) string {
 			if str, ok := val.(string); ok && str != "" {
 				return str

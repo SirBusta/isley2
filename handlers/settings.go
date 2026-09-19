@@ -129,6 +129,7 @@ func SaveSettings(c *gin.Context) {
 		{"aci.enabled", settings.ACI.Enabled, store.SetACIEnabled},
 		{"ec.enabled", settings.EC.Enabled, store.SetECEnabled},
 		{"cannadb.enabled", settings.Cannadb.Enabled, store.SetCannadbEnabled},
+		{"straincompass.enabled", settings.Straincompass.Enabled, store.SetStraincompassEnabled},
 		{"guest_mode", settings.GuestMode, store.SetGuestMode},
 		{"stream_grab_enabled", settings.StreamGrabEnabled, store.SetStreamGrabEnabled},
 		{"api_ingest_enabled", !settings.DisableAPIIngest, store.SetAPIIngestEnabled},
@@ -221,6 +222,29 @@ func SaveSettings(c *gin.Context) {
 		return
 	}
 	store.SetCannadbBaseURL(settings.Cannadb.BaseURL)
+
+	// StrainCompass base-URL override — always persist (empty = use the
+	// default straincompass.com/api/ endpoint baked into the client).
+	err = UpdateSetting(db, store, "straincompass.base_url", settings.Straincompass.BaseURL)
+	if err != nil {
+		fieldLogger.WithError(err).Error("Failed to save StrainCompass base URL setting")
+		apiInternalError(c, "api_failed_to_save_settings")
+		return
+	}
+	store.SetStraincompassBaseURL(settings.Straincompass.BaseURL)
+
+	// StrainCompass API key is optional (keyless access is a valid mode).
+	// Only update if a non-empty value is explicitly provided, so leaving
+	// the field blank on save doesn't clear an existing key.
+	if settings.Straincompass.APIKey != "" {
+		err = UpdateSetting(db, store, "straincompass.api_key", settings.Straincompass.APIKey)
+		if err != nil {
+			fieldLogger.WithError(err).Error("Failed to save StrainCompass API key")
+			apiInternalError(c, "api_failed_to_save_settings")
+			return
+		}
+		store.SetStraincompassAPIKey(settings.Straincompass.APIKey)
+	}
 
 	// Timezone setting — always persist (empty = system default)
 	err = UpdateSetting(db, store, "timezone", settings.Timezone)
@@ -325,6 +349,15 @@ func GetSettings(db *sql.DB) types.SettingsData {
 			settingsData.Cannadb.Enabled = value == "1"
 		case "cannadb.base_url":
 			settingsData.Cannadb.BaseURL = value
+		case "straincompass.enabled":
+			settingsData.Straincompass.Enabled = value == "1"
+		case "straincompass.base_url":
+			settingsData.Straincompass.BaseURL = value
+		case "straincompass.api_key":
+			// Only indicate that a key is set; never reveal the stored value.
+			if value != "" {
+				settingsData.Straincompass.APIKeySet = true
+			}
 		case "aci.token":
 			if value != "" {
 				settingsData.ACI.TokenSet = true
@@ -1331,6 +1364,23 @@ func LoadSettings(db *sql.DB, store *config.Store) {
 	strCannadbBaseURL, err := GetSetting(db, "cannadb.base_url")
 	if err == nil {
 		store.SetCannadbBaseURL(strCannadbBaseURL)
+	}
+
+	strSCEnabled, err := GetSetting(db, "straincompass.enabled")
+	if err == nil {
+		if iSCEnabled, err := strconv.Atoi(strSCEnabled); err == nil {
+			store.SetStraincompassEnabled(iSCEnabled)
+		}
+	}
+
+	strSCBaseURL, err := GetSetting(db, "straincompass.base_url")
+	if err == nil {
+		store.SetStraincompassBaseURL(strSCBaseURL)
+	}
+
+	strSCAPIKey, err := GetSetting(db, "straincompass.api_key")
+	if err == nil {
+		store.SetStraincompassAPIKey(strSCAPIKey)
 	}
 
 	// On first boot after the timezone migration, capture a baseline snapshot

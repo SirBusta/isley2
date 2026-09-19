@@ -1,0 +1,13 @@
+DROP INDEX IF EXISTS idx_strain_straincompass_slug;
+ALTER TABLE strain DROP COLUMN straincompass_lineage_note;
+ALTER TABLE strain DROP COLUMN straincompass_sources;
+ALTER TABLE strain DROP COLUMN straincompass_quality_score;
+ALTER TABLE strain DROP COLUMN straincompass_verified;
+ALTER TABLE strain DROP COLUMN cbg_max;
+ALTER TABLE strain DROP COLUMN cbn_max;
+ALTER TABLE strain DROP COLUMN cbd_max;
+ALTER TABLE strain DROP COLUMN cbd_min;
+ALTER TABLE strain DROP COLUMN thc_max;
+ALTER TABLE strain DROP COLUMN thc_min;
+ALTER TABLE strain DROP COLUMN straincompass_updated_at;
+ALTER TABLE strain DROP COLUMN straincompass_slug;

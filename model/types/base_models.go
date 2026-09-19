@@ -167,6 +167,13 @@ type Settings struct {
 		Enabled bool   `json:"enabled"`
 		BaseURL string `json:"base_url"`
 	} `json:"cannadb"`
+	Straincompass struct {
+		Enabled bool   `json:"enabled"`
+		BaseURL string `json:"base_url"`
+		// APIKey: empty means "leave unchanged", same semantics as the
+		// top-level APIKey field below.
+		APIKey string `json:"api_key"`
+	} `json:"straincompass"`
 	PollingInterval    string `json:"polling_interval"`
 	GuestMode          bool   `json:"guest_mode"`
 	StreamGrabEnabled  bool   `json:"stream_grab_enabled"`
@@ -194,15 +201,22 @@ type CannadbSettings struct {
 	BaseURL string `json:"base_url"`
 }
 
+type StraincompassSettings struct {
+	Enabled   bool   `json:"enabled"`
+	BaseURL   string `json:"base_url"`
+	APIKeySet bool   `json:"api_key_set"` // never echo the raw key back
+}
+
 type SettingsData struct {
-	ACI                ACInfinitySettings `json:"aci"`
-	EC                 EcoWittSettings    `json:"ec"`
-	Cannadb            CannadbSettings    `json:"cannadb"`
-	PollingInterval    int                `json:"polling_interval"`
-	GuestMode          bool               `json:"guest_mode"`
-	StreamGrabEnabled  bool               `json:"stream_grab_enabled"`
-	StreamGrabInterval int                `json:"stream_grab_interval"`
-	APIKey             string             `json:"api_key"`
+	ACI                ACInfinitySettings    `json:"aci"`
+	EC                 EcoWittSettings       `json:"ec"`
+	Cannadb            CannadbSettings       `json:"cannadb"`
+	Straincompass      StraincompassSettings `json:"straincompass"`
+	PollingInterval    int                   `json:"polling_interval"`
+	GuestMode          bool                  `json:"guest_mode"`
+	StreamGrabEnabled  bool                  `json:"stream_grab_enabled"`
+	StreamGrabInterval int                   `json:"stream_grab_interval"`
+	APIKey             string                `json:"api_key"`
 	// New: reflect whether API ingest is enabled (true) or disabled (false)
 	APIIngestEnabled    bool   `json:"api_ingest_enabled"`
 	SensorRetentionDays int    `json:"sensor_retention_days"`
@@ -239,6 +253,41 @@ type Strain struct {
 	// record's indexedAt, kept for future refresh logic.
 	CannadbURI       string `json:"cannadb_uri,omitempty"`
 	CannadbIndexedAt string `json:"cannadb_indexed_at,omitempty"`
+
+	// StrainCompass provenance + cannabinoid/attribute data. StraincompassSlug
+	// is the source record's stable slug and the upsert key (empty for
+	// manually-created strains or ones only sourced from CannaDB).
+	StraincompassSlug        string   `json:"straincompass_slug,omitempty"`
+	StraincompassUpdatedAt   string   `json:"straincompass_updated_at,omitempty"`
+	ThcMin                   *float64 `json:"thc_min,omitempty"`
+	ThcMax                   *float64 `json:"thc_max,omitempty"`
+	CbdMin                   *float64 `json:"cbd_min,omitempty"`
+	CbdMax                   *float64 `json:"cbd_max,omitempty"`
+	CbnMax                   *float64 `json:"cbn_max,omitempty"`
+	CbgMax                   *float64 `json:"cbg_max,omitempty"`
+	StraincompassVerified    *bool    `json:"straincompass_verified,omitempty"`
+	StraincompassQuality     *float64 `json:"straincompass_quality_score,omitempty"`
+	StraincompassSources     string   `json:"straincompass_sources,omitempty"`
+	StraincompassLineageNote string   `json:"straincompass_lineage_note,omitempty"`
+
+	// Effects/Flavors/Terpenes/MedicalUses are populated only by the
+	// single-strain detail query (GetStrain), not list queries, to avoid an
+	// N+1 blowup on the strains grid.
+	Effects     []StrainAttribute `json:"effects,omitempty"`
+	Flavors     []StrainAttribute `json:"flavors,omitempty"`
+	Terpenes    []StrainAttribute `json:"terpenes,omitempty"`
+	MedicalUses []StrainAttribute `json:"medical_uses,omitempty"`
+}
+
+// StrainAttribute is a single effect/flavor/terpene/medical-use row imported
+// from StrainCompass. Intensity (a 0-100 score) is used by effects; Level (a
+// qualitative "low"/"medium"/"high" string) is used by terpenes. Both are
+// left nil where not applicable to the attribute kind.
+type StrainAttribute struct {
+	ID        int      `json:"id"`
+	Name      string   `json:"name"`
+	Intensity *float64 `json:"intensity,omitempty"`
+	Level     *string  `json:"level,omitempty"`
 }
 
 type StrainLineage struct {

@@ -188,7 +188,7 @@ func GetStrains(db *sql.DB) []types.Strain {
 	// it) otherwise LEFT JOINs to NULL, which fails to scan into the
 	// non-nullable int/string fields below and previously blanked the
 	// entire strain list rather than just that one row.
-	rows, err := db.Query("SELECT s.id, s.name, coalesce(b.id, 0) as breeder_id, coalesce(b.name, '') as breeder, s.indica, s.sativa, s.autoflower, s.description, coalesce(s.short_desc, ''), s.seed_count FROM strain s left outer join breeder b on s.breeder_id = b.id ORDER BY s.name ASC")
+	rows, err := db.Query("SELECT s.id, s.name, coalesce(b.id, 0) as breeder_id, coalesce(b.name, '') as breeder, s.indica, s.sativa, s.autoflower, s.description, coalesce(s.short_desc, ''), s.seed_count, s.thc_min, s.thc_max FROM strain s left outer join breeder b on s.breeder_id = b.id ORDER BY s.name ASC")
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to query strains")
 		return nil
@@ -197,7 +197,7 @@ func GetStrains(db *sql.DB) []types.Strain {
 	var strains []types.Strain
 	for rows.Next() {
 		var strain types.Strain
-		err = rows.Scan(&strain.ID, &strain.Name, &strain.BreederID, &strain.Breeder, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.Description, &strain.ShortDescription, &strain.SeedCount)
+		err = rows.Scan(&strain.ID, &strain.Name, &strain.BreederID, &strain.Breeder, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.Description, &strain.ShortDescription, &strain.SeedCount, &strain.ThcMin, &strain.ThcMax)
 		if err != nil {
 			fieldLogger.WithError(err).Error("Failed to scan strain")
 			return nil
@@ -212,13 +212,18 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 	fieldLogger := logger.Log.WithField("func", "GetStrain")
 
 	var strain types.Strain
+	var straincompassVerified sql.NullBool
 	//join in breeder name
 	err := db.QueryRow(`
-		SELECT s.id, s.name, coalesce(s.short_desc, ''), b.name AS breeder, b.id as breeder_id, s.indica, s.sativa, s.autoflower, s.seed_count, s.description, coalesce(s.cycle_time, 0), coalesce(s.url, ''), coalesce(s.cannadb_uri, '')
+		SELECT s.id, s.name, coalesce(s.short_desc, ''), b.name AS breeder, b.id as breeder_id, s.indica, s.sativa, s.autoflower, s.seed_count, s.description, coalesce(s.cycle_time, 0), coalesce(s.url, ''), coalesce(s.cannadb_uri, ''),
+		       coalesce(s.straincompass_slug, ''), coalesce(s.straincompass_updated_at, ''), s.thc_min, s.thc_max, s.cbd_min, s.cbd_max, s.cbn_max, s.cbg_max,
+		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, '')
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		WHERE s.id = $1`, id).Scan(
-		&strain.ID, &strain.Name, &strain.ShortDescription, &strain.Breeder, &strain.BreederID, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount, &strain.Description, &strain.CycleTime, &strain.Url, &strain.CannadbURI)
+		&strain.ID, &strain.Name, &strain.ShortDescription, &strain.Breeder, &strain.BreederID, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount, &strain.Description, &strain.CycleTime, &strain.Url, &strain.CannadbURI,
+		&strain.StraincompassSlug, &strain.StraincompassUpdatedAt, &strain.ThcMin, &strain.ThcMax, &strain.CbdMin, &strain.CbdMax, &strain.CbnMax, &strain.CbgMax,
+		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			fieldLogger.Error("Strain not found")
@@ -227,8 +232,74 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		}
 		return types.Strain{}
 	}
+	if straincompassVerified.Valid {
+		strain.StraincompassVerified = &straincompassVerified.Bool
+	}
+
+	strain.Effects = getStrainAttributes(db, "strain_effect", strain.ID, true, false)
+	strain.Flavors = getStrainAttributes(db, "strain_flavor", strain.ID, false, false)
+	strain.Terpenes = getStrainAttributes(db, "strain_terpene", strain.ID, false, true)
+	strain.MedicalUses = getStrainAttributes(db, "strain_medical_use", strain.ID, false, false)
 
 	return strain
+}
+
+// getStrainAttributes fetches rows from one of the strain attribute child
+// tables (strain_effect/flavor/terpene/medical_use) for the strain detail
+// view. withIntensity/withLevel select the table's optional numeric column
+// (effects carry intensity, terpenes carry level; flavors/medical uses have
+// neither). table is always one of the four constant table names above —
+// never user input — so building the query string is safe here.
+func getStrainAttributes(db *sql.DB, table string, strainID int, withIntensity, withLevel bool) []types.StrainAttribute {
+	fieldLogger := logger.Log.WithField("func", "getStrainAttributes").WithField("table", table)
+
+	col := "NULL"
+	switch {
+	case withIntensity:
+		col = "intensity"
+	case withLevel:
+		col = "level"
+	}
+
+	rows, err := db.Query("SELECT id, name, "+col+" FROM "+table+" WHERE strain_id = $1 ORDER BY name ASC", strainID)
+	if err != nil {
+		fieldLogger.WithError(err).Error("Failed to query strain attributes")
+		return nil
+	}
+	defer rows.Close()
+
+	var attrs []types.StrainAttribute
+	for rows.Next() {
+		var attr types.StrainAttribute
+		if withIntensity {
+			var val sql.NullFloat64
+			if err := rows.Scan(&attr.ID, &attr.Name, &val); err != nil {
+				fieldLogger.WithError(err).Error("Failed to scan strain attribute")
+				return nil
+			}
+			if val.Valid {
+				attr.Intensity = &val.Float64
+			}
+		} else if withLevel {
+			var val sql.NullString
+			if err := rows.Scan(&attr.ID, &attr.Name, &val); err != nil {
+				fieldLogger.WithError(err).Error("Failed to scan strain attribute")
+				return nil
+			}
+			if val.Valid {
+				attr.Level = &val.String
+			}
+		} else {
+			var unused sql.NullString
+			if err := rows.Scan(&attr.ID, &attr.Name, &unused); err != nil {
+				fieldLogger.WithError(err).Error("Failed to scan strain attribute")
+				return nil
+			}
+		}
+		attrs = append(attrs, attr)
+	}
+
+	return attrs
 }
 
 func AddStrainHandler(c *gin.Context) {

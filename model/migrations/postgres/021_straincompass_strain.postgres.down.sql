@@ -1,0 +1,13 @@
+DROP INDEX IF EXISTS idx_strain_straincompass_slug;
+ALTER TABLE strain DROP COLUMN IF EXISTS straincompass_lineage_note;
+ALTER TABLE strain DROP COLUMN IF EXISTS straincompass_sources;
+ALTER TABLE strain DROP COLUMN IF EXISTS straincompass_quality_score;
+ALTER TABLE strain DROP COLUMN IF EXISTS straincompass_verified;
+ALTER TABLE strain DROP COLUMN IF EXISTS cbg_max;
+ALTER TABLE strain DROP COLUMN IF EXISTS cbn_max;
+ALTER TABLE strain DROP COLUMN IF EXISTS cbd_max;
+ALTER TABLE strain DROP COLUMN IF EXISTS cbd_min;
+ALTER TABLE strain DROP COLUMN IF EXISTS thc_max;
+ALTER TABLE strain DROP COLUMN IF EXISTS thc_min;
+ALTER TABLE strain DROP COLUMN IF EXISTS straincompass_updated_at;
+ALTER TABLE strain DROP COLUMN IF EXISTS straincompass_slug;

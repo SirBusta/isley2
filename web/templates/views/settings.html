@@ -128,6 +128,45 @@ color: #0d6efd; /* Primary color */
                     </div>
                 </div>
 
+                <!-- StrainCompass Section -->
+                <div class="card mb-4 shadow-sm border-start border-4 border-secondary">
+                    <div class="card-header bg-themed">
+                        <h2 class="h5 card-title mb-0"><i class="fa fa-flask me-2"></i>{{ .lcl.settings_straincompass }}</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="straincompassEnabled" {{ if .settings.Straincompass.Enabled }}checked{{ end }}>
+                            <label class="form-check-label" for="straincompassEnabled">{{ .lcl.straincompass_enabled_info }}</label>
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            {{ .lcl.straincompass_enabled_desc }}
+                        </small>
+
+                        <hr class="my-3">
+                        <label for="straincompassApiKey" class="form-label">{{ .lcl.straincompass_api_key_label }}</label>
+                        <div class="d-flex align-items-center gap-2" style="max-width:420px">
+                            <input type="password" class="form-control" id="straincompassApiKey"
+                                   placeholder="{{ if .settings.Straincompass.APIKeySet }}••••••••{{ else }}{{ .lcl.straincompass_api_key_placeholder }}{{ end }}">
+                            {{ if .settings.Straincompass.APIKeySet }}
+                            <span class="badge bg-success">{{ .lcl.token_set }}</span>
+                            {{ else }}
+                            <span class="badge bg-secondary">{{ .lcl.straincompass_key_optional }}</span>
+                            {{ end }}
+                        </div>
+                        <small class="text-muted d-block mt-2">
+                            {{ .lcl.straincompass_api_key_desc }}
+                        </small>
+
+                        <hr class="my-3">
+                        <label for="straincompassBaseUrl" class="form-label">{{ .lcl.straincompass_base_url_label }}</label>
+                        <input type="text" class="form-control" id="straincompassBaseUrl" style="max-width:420px"
+                               placeholder="https://straincompass.com/api/" value="{{ .settings.Straincompass.BaseURL }}">
+                        <small class="text-muted d-block mt-2">
+                            {{ .lcl.straincompass_base_url_desc }}
+                        </small>
+                    </div>
+                </div>
+
                 <!-- General Settings -->
                 <div class="card mb-4 shadow-sm border-start border-4 border-info">
                     <div class="card-header bg-themed">
@@ -1426,6 +1465,11 @@ color: #0d6efd; /* Primary color */
                 cannadb: {
                     enabled: document.getElementById("cannadbEnabled").checked,
                     base_url: document.getElementById("cannadbBaseUrl").value.trim(),
+                },
+                straincompass: {
+                    enabled: document.getElementById("straincompassEnabled").checked,
+                    base_url: document.getElementById("straincompassBaseUrl").value.trim(),
+                    api_key: document.getElementById("straincompassApiKey").value.trim(),
                 },
                 polling_interval: document.getElementById("pollingInterval").value,
                 guest_mode: document.getElementById("guestMode").checked,
