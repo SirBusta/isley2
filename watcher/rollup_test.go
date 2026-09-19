@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,81 @@ import (
 
 	"isley/tests/testutil"
 )
+
+// explainPlan returns SQLite's EXPLAIN QUERY PLAN detail lines for query,
+// one per line, so tests can assert on how a statement will be executed.
+func explainPlan(t *testing.T, db *sql.DB, query string) string {
+	t.Helper()
+	rows, err := db.Query("EXPLAIN QUERY PLAN " + query)
+	require.NoError(t, err)
+	defer rows.Close()
+
+	var sb strings.Builder
+	for rows.Next() {
+		var id, parent, notUsed int
+		var detail string
+		require.NoError(t, rows.Scan(&id, &parent, &notUsed, &detail))
+		sb.WriteString(detail)
+		sb.WriteString("\n")
+	}
+	require.NoError(t, rows.Err())
+	return sb.String()
+}
+
+// TestSQLiteRollupQuery_IncrementalRangeSeeksCreateDtIndex guards the fix
+// for the ~13s write-lock hold: the incremental rollup must range-seek
+// idx_sensor_data_create_dt instead of letting the planner full-scan every
+// sensor_data row ever recorded (which it does when no ANALYZE statistics
+// exist, i.e. whenever sensor retention pruning is off).
+func TestSQLiteRollupQuery_IncrementalRangeSeeksCreateDtIndex(t *testing.T) {
+	t.Parallel()
+
+	db := testutil.NewTestDB(t)
+	plan := explainPlan(t, db, buildSQLiteRollupQuery(false))
+
+	assert.Contains(t, plan, "SEARCH sd USING INDEX idx_sensor_data_create_dt",
+		"incremental rollup should range-seek the create_dt index; plan was:\n%s", plan)
+	assert.NotContains(t, plan, "SCAN sd",
+		"incremental rollup must not full-scan sensor_data; plan was:\n%s", plan)
+}
+
+// TestSQLiteRollupQuery_FullBackfillDoesNotPinIndex: a full backfill has no
+// time filter and legitimately reads every row, so forcing a create_dt
+// index walk there would only add per-row lookups.
+func TestSQLiteRollupQuery_FullBackfillDoesNotPinIndex(t *testing.T) {
+	t.Parallel()
+
+	assert.NotContains(t, buildSQLiteRollupQuery(true), "INDEXED BY")
+	assert.Contains(t, buildSQLiteRollupQuery(false), "INDEXED BY "+sqliteRollupIndex)
+}
+
+// TestRefreshHourlyRollups_IncrementalFallsBackWhenIndexMissing: INDEXED BY
+// is a hard requirement in SQLite (a missing index is an error, not a
+// silent scan), so a database that lacks idx_sensor_data_create_dt must
+// still roll up correctly via the unpinned fallback rather than failing
+// every 10 minutes forever.
+func TestRefreshHourlyRollups_IncrementalFallsBackWhenIndexMissing(t *testing.T) {
+	t.Parallel()
+
+	db := testutil.NewTestDB(t)
+	id := seedSensor(t, db, "test", "dev", "temp")
+
+	hourAgo := time.Now().Add(-1 * time.Hour)
+	readingsAt(t, db, id, hourAgo, 10)
+
+	w := newTestWatcher(t, db)
+	require.NoError(t, w.RefreshHourlyRollups()) // full backfill, so the next run is incremental
+
+	_, err := db.Exec(`DROP INDEX ` + sqliteRollupIndex)
+	require.NoError(t, err)
+
+	readingsAt(t, db, id, hourAgo, 30)
+	require.NoError(t, w.RefreshHourlyRollups(), "rollup must fall back rather than fail when the index is gone")
+
+	_, maxV, _, n := hourlyBucket(t, db, id, hourAgo.Format("2006-01-02 15:00:00"))
+	assert.InDelta(t, 30.0, maxV, 0.0001)
+	assert.Equal(t, 2, n, "the fallback run must still pick up the new reading")
+}
 
 // readingsAt seeds N raw sensor_data rows for a sensor at a fixed
 // timestamp so the rollup query has a deterministic input to aggregate.

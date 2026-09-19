@@ -268,14 +268,14 @@ func TestDbPath_DefaultsToDataIsleyDB(t *testing.T) {
 	initTestLogger()
 	t.Setenv("ISLEY_DB_FILE", "")
 	got := DbPath()
-	assert.Equal(t, "data/isley.db?_journal_mode=WAL&_pragma=busy_timeout(5000)", got)
+	assert.Equal(t, "data/isley.db?_journal_mode=WAL&_pragma=busy_timeout(30000)", got)
 }
 
 func TestDbPath_HonorsEnvOverride(t *testing.T) {
 	initTestLogger()
 	t.Setenv("ISLEY_DB_FILE", "/tmp/elsewhere.db")
 	got := DbPath()
-	assert.Equal(t, "/tmp/elsewhere.db?_journal_mode=WAL&_pragma=busy_timeout(5000)", got)
+	assert.Equal(t, "/tmp/elsewhere.db?_journal_mode=WAL&_pragma=busy_timeout(30000)", got)
 }
 
 // ---------------------------------------------------------------------------

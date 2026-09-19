@@ -406,6 +406,27 @@ func TestPruneSensorData_RetentionDisabled(t *testing.T) {
 	assert.Equal(t, 1, countSensorData(t, db, id), "row must survive when retention is disabled")
 }
 
+// With pruning off (the default) the post-prune ANALYZE never ran, leaving
+// SQLite's planner without statistics forever. The disabled branch must
+// still gather them — without touching any data.
+func TestPruneSensorData_RetentionDisabledStillGathersStatistics(t *testing.T) {
+	t.Parallel()
+
+	db := testutil.NewTestDB(t)
+	id := seedSensor(t, db, "x", "y", "z")
+	// ANALYZE only records statistics for indexed tables that have rows.
+	insertReadingAt(t, db, id, 1.0, time.Now().Add(-1*time.Hour))
+	insertReadingAt(t, db, id, 2.0, time.Now().Add(-2*time.Hour))
+
+	w := newTestWatcher(t, db) // retention 0 → pruning disabled
+	require.NoError(t, w.PruneSensorData())
+
+	var statRows int
+	require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM sqlite_stat1 WHERE tbl = 'sensor_data'`).Scan(&statRows))
+	assert.Positive(t, statRows, "ANALYZE should have recorded statistics for sensor_data")
+	assert.Equal(t, 2, countSensorData(t, db, id), "gathering statistics must not delete anything")
+}
+
 func TestPruneSensorData_DeletesOnlyOldRows(t *testing.T) {
 	t.Parallel()
 

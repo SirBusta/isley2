@@ -139,11 +139,15 @@ func DbPath() string {
 	if dbPath == "" {
 		dbPath = "data/isley.db"
 	}
-	// busy_timeout(5000): without it, SQLite's default busy timeout is 0,
+	// busy_timeout(30000): without it, SQLite's default busy timeout is 0,
 	// so any write that overlaps a background job (sensor polling, hourly
 	// rollups, pruning) fails immediately with "database is locked"
-	// instead of waiting briefly for the other writer to finish.
-	return dbPath + "?_journal_mode=WAL&_pragma=busy_timeout(5000)"
+	// instead of waiting for the other writer to finish. 30s rather than
+	// a few seconds because real stalls on slow storage (Unraid array /
+	// FUSE-backed appdata) were observed lasting 30s+; this is only a
+	// safety net — the hourly rollup itself no longer holds the lock
+	// anywhere near that long (see watcher/rollup.go).
+	return dbPath + "?_journal_mode=WAL&_pragma=busy_timeout(30000)"
 }
 
 func MigrateDB() {

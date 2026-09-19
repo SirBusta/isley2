@@ -348,6 +348,13 @@ func (w *Watcher) PruneSensorData() error {
 	days := w.SensorRetention()
 	if days <= 0 {
 		w.Logger.Info("Sensor data pruning is disabled (sensor_retention_days = 0)")
+		// The ANALYZE further down only runs after a prune, so with pruning
+		// off (the default) SQLite would never gather planner statistics and
+		// time-window queries over the ever-growing sensor_data table could
+		// degrade into full scans. Keep statistics fresh regardless.
+		if model.IsSQLite() {
+			w.refreshSQLiteStatistics()
+		}
 		return nil
 	}
 
@@ -379,6 +386,43 @@ func (w *Watcher) PruneSensorData() error {
 
 	w.Logger.WithField("days", days).Info("Sensor data pruned")
 	return nil
+}
+
+// sqliteAnalysisLimit caps how many rows ANALYZE samples per index. It is
+// approximate by design: the planner only needs to know that create_dt is
+// high-cardinality, and a bounded sample keeps ANALYZE (which takes the
+// write lock) down to milliseconds even on a multi-million-row table.
+const sqliteAnalysisLimit = 1000
+
+// refreshSQLiteStatistics runs a bounded ANALYZE so the query planner has
+// sqlite_stat1 data. Failures are logged and otherwise ignored: statistics
+// are an optimisation, and the rollup no longer depends on them.
+func (w *Watcher) refreshSQLiteStatistics() {
+	ctx := context.Background()
+
+	// analysis_limit is per-connection, so the PRAGMA and the ANALYZE must
+	// run on the same pooled connection.
+	conn, err := w.DB.Conn(ctx)
+	if err != nil {
+		w.Logger.WithError(err).Warn("SQLite statistics refresh skipped: no connection")
+		return
+	}
+	defer conn.Close()
+
+	if _, err := conn.ExecContext(ctx, fmt.Sprintf("PRAGMA analysis_limit = %d", sqliteAnalysisLimit)); err != nil {
+		w.Logger.WithError(err).Warn("SQLite statistics refresh failed setting analysis_limit")
+		return
+	}
+	// Put the connection back as it was so a later full ANALYZE that lands
+	// on this pooled connection isn't silently limited.
+	defer conn.ExecContext(ctx, "PRAGMA analysis_limit = 0") //nolint:errcheck
+
+	start := time.Now()
+	if _, err := conn.ExecContext(ctx, "ANALYZE"); err != nil {
+		w.Logger.WithError(err).Warn("SQLite statistics refresh failed")
+		return
+	}
+	w.Logger.WithField("duration_ms", time.Since(start).Milliseconds()).Info("SQLite planner statistics refreshed")
 }
 
 // trimTrailingPercent strips a single trailing '%' from a value like
