@@ -221,6 +221,26 @@ func TestStraincompassImport_KeepsExistingLineage(t *testing.T) {
 	assert.Equal(t, "My Own Parent", name, "re-import must not overwrite the user's lineage")
 }
 
+func TestStraincompassImport_KeepsHandEnteredAttributes(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	breeder := testutil.SeedBreeder(t, s.db, "Local Breeder")
+
+	status, got := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+	testutil.MustExec(t, s.db, "INSERT INTO strain_terpene (strain_id, name) VALUES ($1, 'Pinene')", got.ID)
+
+	// The fake record has no "sourced" attribute groups, so a re-import must
+	// leave the user's terpene in place.
+	status, _ = s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, 1, s.count(t, "SELECT COUNT(*) FROM strain_terpene WHERE strain_id = $1 AND name = 'Pinene'", got.ID))
+}
+
 func TestCannadbImport_SameStrainTwoBreedersIsTwoRows(t *testing.T) {
 	t.Parallel()
 	s := newImportServer(t)

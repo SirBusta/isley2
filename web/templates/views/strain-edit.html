@@ -129,6 +129,50 @@
                     </div>
                 </div>
 
+                <!-- Cannabinoids + effects/flavors/terpenes/medical uses -->
+                <div class="card mb-4" id="strainProfileCard" data-remove="{{ .lcl.strain_attr_remove }}">
+                    <div class="card-body">
+                        <h2 class="h5 card-title text-primary mb-3">
+                            <i class="fa-solid fa-flask me-1"></i> {{ .lcl.strain_edit_cannabinoids }}
+                        </h2>
+                        <div class="row g-3">
+                            <div class="col-sm-6">
+                                <label class="form-label" for="editThcMin">THC %</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="editThcMin" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_min }}" value="{{ with .strain.ThcMin }}{{ . }}{{ end }}">
+                                    <span class="input-group-text">–</span>
+                                    <input type="number" class="form-control" id="editThcMax" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_max }}" value="{{ with .strain.ThcMax }}{{ . }}{{ end }}" aria-label="THC {{ .lcl.cannabinoid_max }}">
+                                </div>
+                            </div>
+                            <div class="col-sm-6">
+                                <label class="form-label" for="editCbdMin">CBD %</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="editCbdMin" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_min }}" value="{{ with .strain.CbdMin }}{{ . }}{{ end }}">
+                                    <span class="input-group-text">–</span>
+                                    <input type="number" class="form-control" id="editCbdMax" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_max }}" value="{{ with .strain.CbdMax }}{{ . }}{{ end }}" aria-label="CBD {{ .lcl.cannabinoid_max }}">
+                                </div>
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <label class="form-label" for="editCbnMax">CBN % ({{ .lcl.cannabinoid_max }})</label>
+                                <input type="number" class="form-control" id="editCbnMax" min="0" max="100" step="0.1" value="{{ with .strain.CbnMax }}{{ . }}{{ end }}">
+                            </div>
+                            <div class="col-6 col-sm-3">
+                                <label class="form-label" for="editCbgMax">CBG % ({{ .lcl.cannabinoid_max }})</label>
+                                <input type="number" class="form-control" id="editCbgMax" min="0" max="100" step="0.1" value="{{ with .strain.CbgMax }}{{ . }}{{ end }}">
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-2">{{ .lcl.strain_edit_cannabinoids_help }}</small>
+
+                        <hr class="my-3">
+                        <h3 class="h6 text-primary mb-2">{{ .lcl.straincompass_attributes_title }}</h3>
+                        {{ template "strain-attr-editor" (dict "group" "effects" "label" .lcl.straincompass_effects "items" .strain.Effects "placeholder" .lcl.strain_attr_add_placeholder) }}
+                        {{ template "strain-attr-editor" (dict "group" "flavors" "label" .lcl.straincompass_flavors "items" .strain.Flavors "placeholder" .lcl.strain_attr_add_placeholder) }}
+                        {{ template "strain-attr-editor" (dict "group" "terpenes" "label" .lcl.straincompass_terpenes "items" .strain.Terpenes "placeholder" .lcl.strain_attr_add_placeholder) }}
+                        {{ template "strain-attr-editor" (dict "group" "medical_uses" "label" .lcl.straincompass_medical_uses "items" .strain.MedicalUses "placeholder" .lcl.strain_attr_add_placeholder) }}
+                        <small class="text-muted d-block">{{ .lcl.strain_edit_attributes_help }}</small>
+                    </div>
+                </div>
+
                 <!-- Lineage card -->
                 <div class="card mb-4">
                     <div class="card-body">
@@ -210,4 +254,19 @@
 <script src="/static/js/strain-lineage-edit.js"></script>
 {{ template "common/footer.html" .}}
 
+{{ end }}
+
+{{ define "strain-attr-editor" }}
+<!-- Add/remove list for one attribute group; intensity/level ride along in data attributes so saving keeps them. -->
+<div class="strain-attr-editor mb-3" data-group="{{ .group }}">
+    <label class="form-label small text-muted mb-1">{{ .label }}</label>
+    <div class="d-flex flex-wrap gap-1 mb-1 strain-attr-chips">
+        {{ range .items }}
+        <span class="badge text-bg-secondary strain-attr-chip" data-name="{{ .Name }}"{{ with .Intensity }} data-intensity="{{ . }}"{{ end }}{{ with .Level }} data-level="{{ . }}"{{ end }}>
+            {{ .Name }}<button type="button" class="btn-close btn-close-white ms-1 strain-attr-remove" style="font-size:.55em"></button>
+        </span>
+        {{ end }}
+    </div>
+    <input type="text" class="form-control form-control-sm strain-attr-input" style="max-width:260px" maxlength="255" placeholder="{{ .placeholder }}" aria-label="{{ .label }}">
+</div>
 {{ end }}

@@ -163,7 +163,18 @@ func (c *Client) FetchMetaCSRFToken(path string) string {
 // authenticates via X-API-KEY and skips CSRF entirely.
 func (c *Client) SessionPostJSON(t *testing.T, path, csrfToken string, body interface{}) *http.Response {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+path, JSONBody(t, body))
+	return c.sessionJSON(t, http.MethodPost, path, csrfToken, body)
+}
+
+// SessionPutJSON is SessionPostJSON for PUT endpoints.
+func (c *Client) SessionPutJSON(t *testing.T, path, csrfToken string, body interface{}) *http.Response {
+	t.Helper()
+	return c.sessionJSON(t, http.MethodPut, path, csrfToken, body)
+}
+
+func (c *Client) sessionJSON(t *testing.T, method, path, csrfToken string, body interface{}) *http.Response {
+	t.Helper()
+	req, err := http.NewRequest(method, c.BaseURL+path, JSONBody(t, body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	if csrfToken != "" {

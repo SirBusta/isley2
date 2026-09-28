@@ -511,12 +511,43 @@ func UpdateStrainHandler(c *gin.Context) {
 		SeedCount        int    `json:"seed_count"`
 		CycleTime        int    `json:"cycle_time"`
 		Url              string `json:"url"`
+		// Optional blocks: when absent, the stored values are left alone.
+		Cannabinoids *strainCannabinoids `json:"cannabinoids"`
+		Attributes   *struct {
+			Effects     []types.StrainAttribute `json:"effects"`
+			Flavors     []types.StrainAttribute `json:"flavors"`
+			Terpenes    []types.StrainAttribute `json:"terpenes"`
+			MedicalUses []types.StrainAttribute `json:"medical_uses"`
+		} `json:"attributes"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fieldLogger.WithError(err).Error("Failed to bind JSON")
 		apiBadRequest(c, "api_invalid_request_body")
 		return
+	}
+
+	if req.Cannabinoids != nil {
+		if key := req.Cannabinoids.validate(); key != "" {
+			apiBadRequest(c, key)
+			return
+		}
+	}
+	if req.Attributes != nil {
+		for _, g := range []struct {
+			field string
+			attrs []types.StrainAttribute
+		}{
+			{"effect", req.Attributes.Effects},
+			{"flavor", req.Attributes.Flavors},
+			{"terpene", req.Attributes.Terpenes},
+			{"medical_use", req.Attributes.MedicalUses},
+		} {
+			if err := validateStrainAttributeGroup(g.field, g.attrs); err != nil {
+				apiBadRequest(c, err.Error())
+				return
+			}
+		}
 	}
 
 	// Rescue legacy schemeless URLs sent back verbatim by the edit modal
@@ -557,8 +588,30 @@ func UpdateStrainHandler(c *gin.Context) {
 	} else {
 		autoflowerInt = 0
 	}
-	_, err = db.Exec(updateStmt, req.Name, breederID, req.Indica, req.Sativa,
+	tx, err := db.Begin()
+	if err != nil {
+		fieldLogger.WithError(err).Error("Failed to begin transaction")
+		apiInternalError(c, "api_failed_to_update_strain")
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.Exec(updateStmt, req.Name, breederID, req.Indica, req.Sativa,
 		autoflowerInt, req.Description, req.SeedCount, req.CycleTime, req.Url, req.ShortDescription, id)
+	if err == nil && req.Cannabinoids != nil {
+		cb := req.Cannabinoids
+		_, err = tx.Exec(`UPDATE strain SET thc_min = $1, thc_max = $2, cbd_min = $3, cbd_max = $4, cbn_max = $5, cbg_max = $6 WHERE id = $7`,
+			cb.ThcMin, cb.ThcMax, cb.CbdMin, cb.CbdMax, cb.CbnMax, cb.CbgMax, id)
+	}
+	if err == nil && req.Attributes != nil {
+		a := req.Attributes
+		err = replaceStrainAttributes(tx, id, strainAttributeSet{
+			Effects: &a.Effects, Flavors: &a.Flavors, Terpenes: &a.Terpenes, MedicalUses: &a.MedicalUses,
+		})
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to update strain")
 		apiInternalError(c, "api_failed_to_update_strain")

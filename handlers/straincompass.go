@@ -353,82 +353,52 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 }
 
 // replaceStraincompassAttributes rewrites the strain's effects/flavors/
-// terpenes/medical-uses from the StrainCompass record. Only attribute
-// groups marked "sourced" (strain-specific, not generic category filler)
-// in AttributeProvenance are imported — "rule"-based groups are skipped
-// entirely and never reach the database.
+// terpenes/medical-uses from the StrainCompass record. Only groups marked
+// "sourced" (strain-specific, not generic category filler) in
+// AttributeProvenance are written — "rule"-based groups never reach the
+// database — and groups StrainCompass has no sourced data for are left as
+// they are, so values the user entered by hand survive a re-import.
 func replaceStraincompassAttributes(db *sql.DB, strainID int, rec *straincompassStrain) error {
+	var set strainAttributeSet
+	sourced := func(p string) bool { return p == straincompassProvenanceSourced }
+
+	if sourced(rec.AttributeProvenance.Effects) {
+		attrs := make([]types.StrainAttribute, 0, len(rec.Effects))
+		for _, e := range rec.Effects {
+			attrs = append(attrs, types.StrainAttribute{Name: e.Name, Intensity: e.Intensity})
+		}
+		set.Effects = &attrs
+	}
+	if sourced(rec.AttributeProvenance.Flavors) {
+		attrs := make([]types.StrainAttribute, 0, len(rec.Flavors))
+		for _, f := range rec.Flavors {
+			attrs = append(attrs, types.StrainAttribute{Name: f.Name})
+		}
+		set.Flavors = &attrs
+	}
+	if sourced(rec.AttributeProvenance.Terpenes) {
+		attrs := make([]types.StrainAttribute, 0, len(rec.Terpenes))
+		for _, t := range rec.Terpenes {
+			attrs = append(attrs, types.StrainAttribute{Name: t.Name, Level: t.Level})
+		}
+		set.Terpenes = &attrs
+	}
+	if sourced(rec.AttributeProvenance.Medical) {
+		attrs := make([]types.StrainAttribute, 0, len(rec.MedicalUses))
+		for _, m := range rec.MedicalUses {
+			attrs = append(attrs, types.StrainAttribute{Name: m.Name})
+		}
+		set.MedicalUses = &attrs
+	}
+
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
-	if _, err := tx.Exec("DELETE FROM strain_effect WHERE strain_id = $1", strainID); err != nil {
+	defer func() { _ = tx.Rollback() }()
+	if err := replaceStrainAttributes(tx, strainID, set); err != nil {
 		return err
 	}
-	if _, err := tx.Exec("DELETE FROM strain_flavor WHERE strain_id = $1", strainID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec("DELETE FROM strain_terpene WHERE strain_id = $1", strainID); err != nil {
-		return err
-	}
-	if _, err := tx.Exec("DELETE FROM strain_medical_use WHERE strain_id = $1", strainID); err != nil {
-		return err
-	}
-
-	if rec.AttributeProvenance.Effects == straincompassProvenanceSourced {
-		for _, e := range rec.Effects {
-			name := strings.TrimSpace(e.Name)
-			if name == "" {
-				continue
-			}
-			if _, err := tx.Exec("INSERT INTO strain_effect (strain_id, name, intensity) VALUES ($1, $2, $3)",
-				strainID, name, e.Intensity); err != nil {
-				return err
-			}
-		}
-	}
-
-	if rec.AttributeProvenance.Flavors == straincompassProvenanceSourced {
-		for _, f := range rec.Flavors {
-			name := strings.TrimSpace(f.Name)
-			if name == "" {
-				continue
-			}
-			if _, err := tx.Exec("INSERT INTO strain_flavor (strain_id, name) VALUES ($1, $2)",
-				strainID, name); err != nil {
-				return err
-			}
-		}
-	}
-
-	if rec.AttributeProvenance.Terpenes == straincompassProvenanceSourced {
-		for _, t := range rec.Terpenes {
-			name := strings.TrimSpace(t.Name)
-			if name == "" {
-				continue
-			}
-			if _, err := tx.Exec("INSERT INTO strain_terpene (strain_id, name, level) VALUES ($1, $2, $3)",
-				strainID, name, t.Level); err != nil {
-				return err
-			}
-		}
-	}
-
-	if rec.AttributeProvenance.Medical == straincompassProvenanceSourced {
-		for _, m := range rec.MedicalUses {
-			name := strings.TrimSpace(m.Name)
-			if name == "" {
-				continue
-			}
-			if _, err := tx.Exec("INSERT INTO strain_medical_use (strain_id, name) VALUES ($1, $2)",
-				strainID, name); err != nil {
-				return err
-			}
-		}
-	}
-
 	return tx.Commit()
 }
 

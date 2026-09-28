@@ -396,6 +396,22 @@ func buildFuncMap(store *config.Store) template.FuncMap {
 		// value it points to — needed for tri-state (nil/false/true)
 		// fields like Strain.StraincompassVerified.
 		"boolPtr": func(b *bool) bool { return b != nil && *b },
+		// dict builds a map from key/value pairs so a shared sub-template
+		// can take several arguments: {{ template "x" (dict "k" v ...) }}.
+		"dict": func(pairs ...any) (map[string]any, error) {
+			if len(pairs)%2 != 0 {
+				return nil, fmt.Errorf("dict: odd number of arguments")
+			}
+			m := make(map[string]any, len(pairs)/2)
+			for i := 0; i < len(pairs); i += 2 {
+				key, ok := pairs[i].(string)
+				if !ok {
+					return nil, fmt.Errorf("dict: key %v is not a string", pairs[i])
+				}
+				m[key] = pairs[i+1]
+			}
+			return m, nil
+		},
 		"default": func(val interface{}, def string) string {
 			if str, ok := val.(string); ok && str != "" {
 				return str
