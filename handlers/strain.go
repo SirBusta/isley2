@@ -298,13 +298,15 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 	err := db.QueryRow(`
 		SELECT s.id, s.name, coalesce(s.short_desc, ''), b.name AS breeder, b.id as breeder_id, s.indica, s.sativa, s.autoflower, s.seed_count, s.description, coalesce(s.cycle_time, 0), coalesce(s.url, ''), coalesce(s.cannadb_uri, ''),
 		       coalesce(s.straincompass_slug, ''), coalesce(s.straincompass_updated_at, ''), s.thc_min, s.thc_max, s.cbd_min, s.cbd_max, s.cbn_max, s.cbg_max,
-		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, '')
+		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, ''),
+		       coalesce(s.height_indoor, ''), coalesce(s.height_outdoor, ''), coalesce(s.yield_indoor, ''), coalesce(s.yield_outdoor, '')
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		WHERE s.id = $1`, id).Scan(
 		&strain.ID, &strain.Name, &strain.ShortDescription, &strain.Breeder, &strain.BreederID, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount, &strain.Description, &strain.CycleTime, &strain.Url, &strain.CannadbURI,
 		&strain.StraincompassSlug, &strain.StraincompassUpdatedAt, &strain.ThcMin, &strain.ThcMax, &strain.CbdMin, &strain.CbdMax, &strain.CbnMax, &strain.CbgMax,
-		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote)
+		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote,
+		&strain.HeightIndoor, &strain.HeightOutdoor, &strain.YieldIndoor, &strain.YieldOutdoor)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			fieldLogger.Error("Strain not found")
@@ -395,15 +397,24 @@ func AddStrainHandler(c *gin.Context) {
 		Autoflower       bool   `json:"autoflower"`
 		SeedCount        int    `json:"seed_count"`
 		Description      string `json:"description"`
-		ShortDescription string `json:"short_desc"`
-		CycleTime        int    `json:"cycle_time"`
-		Url              string `json:"url"`
+		ShortDescription string             `json:"short_desc"`
+		CycleTime        int                `json:"cycle_time"`
+		Url              string             `json:"url"`
+		Growing          *strainGrowingInfo `json:"growing"`
 	}
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		fieldLogger.WithError(err).Error("Failed to bind JSON")
 		apiBadRequest(c, "api_invalid_request_payload")
 		return
+	}
+	var growing strainGrowingInfo
+	if req.Growing != nil {
+		growing = *req.Growing
+		if err := growing.normalize(); err != nil {
+			apiBadRequest(c, err.Error())
+			return
+		}
 	}
 
 	// Rescue legacy/typed schemeless URLs (e.g. "www.seedfinder.eu/x") by
@@ -433,8 +444,9 @@ func AddStrainHandler(c *gin.Context) {
 
 	// Insert the new strain into the database
 	stmt := `
-		INSERT INTO strain (name, breeder_id, indica, sativa, autoflower, seed_count, description, cycle_time, url, short_desc)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id
+		INSERT INTO strain (name, breeder_id, indica, sativa, autoflower, seed_count, description, cycle_time, url, short_desc,
+		                    height_indoor, height_outdoor, yield_indoor, yield_outdoor)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14) RETURNING id
 	`
 	//convert autoflower to int
 	var autoflowerInt int
@@ -444,7 +456,8 @@ func AddStrainHandler(c *gin.Context) {
 		autoflowerInt = 0
 	}
 	var id int
-	err := db.QueryRow(stmt, req.Name, breederID, req.Indica, req.Sativa, autoflowerInt, req.SeedCount, req.Description, req.CycleTime, req.Url, req.ShortDescription).Scan(&id)
+	err := db.QueryRow(stmt, req.Name, breederID, req.Indica, req.Sativa, autoflowerInt, req.SeedCount, req.Description, req.CycleTime, req.Url, req.ShortDescription,
+		nullableStr(growing.HeightIndoor), nullableStr(growing.HeightOutdoor), nullableStr(growing.YieldIndoor), nullableStr(growing.YieldOutdoor)).Scan(&id)
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to insert strain")
 		apiInternalError(c, "api_failed_to_add_strain")
@@ -512,6 +525,7 @@ func UpdateStrainHandler(c *gin.Context) {
 		CycleTime        int    `json:"cycle_time"`
 		Url              string `json:"url"`
 		// Optional blocks: when absent, the stored values are left alone.
+		Growing      *strainGrowingInfo  `json:"growing"`
 		Cannabinoids *strainCannabinoids `json:"cannabinoids"`
 		Attributes   *struct {
 			Effects     []types.StrainAttribute `json:"effects"`
@@ -530,6 +544,12 @@ func UpdateStrainHandler(c *gin.Context) {
 	if req.Cannabinoids != nil {
 		if key := req.Cannabinoids.validate(); key != "" {
 			apiBadRequest(c, key)
+			return
+		}
+	}
+	if req.Growing != nil {
+		if err := req.Growing.normalize(); err != nil {
+			apiBadRequest(c, err.Error())
 			return
 		}
 	}
@@ -602,6 +622,11 @@ func UpdateStrainHandler(c *gin.Context) {
 		cb := req.Cannabinoids
 		_, err = tx.Exec(`UPDATE strain SET thc_min = $1, thc_max = $2, cbd_min = $3, cbd_max = $4, cbn_max = $5, cbg_max = $6 WHERE id = $7`,
 			cb.ThcMin, cb.ThcMax, cb.CbdMin, cb.CbdMax, cb.CbnMax, cb.CbgMax, id)
+	}
+	if err == nil && req.Growing != nil {
+		g := req.Growing
+		_, err = tx.Exec(`UPDATE strain SET height_indoor = $1, height_outdoor = $2, yield_indoor = $3, yield_outdoor = $4 WHERE id = $5`,
+			nullableStr(g.HeightIndoor), nullableStr(g.HeightOutdoor), nullableStr(g.YieldIndoor), nullableStr(g.YieldOutdoor), id)
 	}
 	if err == nil && req.Attributes != nil {
 		a := req.Attributes

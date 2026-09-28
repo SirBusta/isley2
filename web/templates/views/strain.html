@@ -164,6 +164,30 @@
                                 {{ end }}
                             </span>
                         </li>
+                        {{ with .strain.HeightIndoor }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-ruler-vertical me-2"></i>{{ $.lcl.height_indoor }}</span>
+                            <span class="strain-info-value">{{ . }}</span>
+                        </li>
+                        {{ end }}
+                        {{ with .strain.HeightOutdoor }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-ruler-vertical me-2"></i>{{ $.lcl.height_outdoor }}</span>
+                            <span class="strain-info-value">{{ . }}</span>
+                        </li>
+                        {{ end }}
+                        {{ with .strain.YieldIndoor }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-scale-balanced me-2"></i>{{ $.lcl.yield_indoor }}</span>
+                            <span class="strain-info-value">{{ . }}</span>
+                        </li>
+                        {{ end }}
+                        {{ with .strain.YieldOutdoor }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-scale-balanced me-2"></i>{{ $.lcl.yield_outdoor }}</span>
+                            <span class="strain-info-value">{{ . }}</span>
+                        </li>
+                        {{ end }}
                     </ul>
                 </div>
             </div>

@@ -115,6 +115,29 @@ func TestStrainEdit_OmittedBlocksLeaveDataAlone(t *testing.T) {
 	assert.Equal(t, []string{"Berry"}, e.names(t, "strain_flavor"))
 }
 
+func TestStrainEdit_SavesAndClearsGrowingInfo(t *testing.T) {
+	t.Parallel()
+	e := newStrainEditEnv(t)
+
+	require.Equal(t, http.StatusOK, e.put(t, map[string]any{
+		"growing": map[string]any{"height_indoor": " 80-120 cm ", "yield_indoor": "400 g/m²", "height_outdoor": "", "yield_outdoor": ""},
+	}))
+	var hIn, yIn, hOut sql.NullString
+	require.NoError(t, e.db.QueryRow("SELECT height_indoor, yield_indoor, height_outdoor FROM strain WHERE id = $1", e.strainID).Scan(&hIn, &yIn, &hOut))
+	assert.Equal(t, "80-120 cm", hIn.String)
+	assert.Equal(t, "400 g/m²", yIn.String)
+	assert.False(t, hOut.Valid, "empty is stored as NULL")
+
+	// Omitting the block leaves it alone; sending blanks clears it.
+	require.Equal(t, http.StatusOK, e.put(t, nil))
+	require.NoError(t, e.db.QueryRow("SELECT height_indoor FROM strain WHERE id = $1", e.strainID).Scan(&hIn))
+	assert.Equal(t, "80-120 cm", hIn.String)
+
+	require.Equal(t, http.StatusOK, e.put(t, map[string]any{"growing": map[string]any{"height_indoor": ""}}))
+	require.NoError(t, e.db.QueryRow("SELECT height_indoor FROM strain WHERE id = $1", e.strainID).Scan(&hIn))
+	assert.False(t, hIn.Valid)
+}
+
 func TestStrainEdit_RejectsBadCannabinoids(t *testing.T) {
 	t.Parallel()
 	e := newStrainEditEnv(t)

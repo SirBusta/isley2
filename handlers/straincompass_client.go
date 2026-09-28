@@ -131,8 +131,8 @@ type straincompassAttributeProvenance struct {
 const straincompassProvenanceSourced = "sourced"
 
 // straincompassStrain is the full strain record returned by the list/filter
-// endpoint. Unknown/unused upstream fields (agronomic details, popularity
-// scoring, etc.) are intentionally not modeled here.
+// endpoint. Unused upstream fields (floweringType, growDifficulty,
+// popularity scoring, etc.) are intentionally not modeled here.
 type straincompassStrain struct {
 	ID                  string                           `json:"id"`
 	Slug                string                           `json:"slug"`
@@ -155,6 +155,10 @@ type straincompassStrain struct {
 	MedicalUses         []straincompassMedicalUse        `json:"medicalUses"`
 	FloweringTimeMin    *int                             `json:"floweringTimeMin"`
 	FloweringTimeMax    *int                             `json:"floweringTimeMax"`
+	HeightIndoor        *string                          `json:"heightIndoor"` // free text, e.g. "90-150cm"
+	HeightOutdoor       *string                          `json:"heightOutdoor"`
+	YieldIndoor         *string                          `json:"yieldIndoor"` // free text, e.g. "450-550 g/m²"
+	YieldOutdoor        *string                          `json:"yieldOutdoor"`
 	Breeder             string                           `json:"breeder"`
 	Sources             []string                         `json:"sources"`
 	Verified            bool                             `json:"verified"`

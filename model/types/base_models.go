@@ -270,6 +270,12 @@ type Strain struct {
 	StraincompassSources     string   `json:"straincompass_sources,omitempty"`
 	StraincompassLineageNote string   `json:"straincompass_lineage_note,omitempty"`
 
+	// Expected height/yield as free text with units, e.g. "90-150cm".
+	HeightIndoor  string `json:"height_indoor,omitempty"`
+	HeightOutdoor string `json:"height_outdoor,omitempty"`
+	YieldIndoor   string `json:"yield_indoor,omitempty"`
+	YieldOutdoor  string `json:"yield_outdoor,omitempty"`
+
 	// Effects/Flavors/Terpenes/MedicalUses are populated only by the
 	// single-strain detail query (GetStrain), not list queries, to avoid an
 	// N+1 blowup on the strains grid.

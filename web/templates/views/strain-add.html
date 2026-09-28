@@ -117,6 +117,24 @@
                                 <label for="editSeedCount" class="form-label">{{ .lcl.seed_count }}</label>
                                 <input type="number" class="form-control" id="editSeedCount" min="0" value="0">
                             </div>
+
+                            <!-- Growing information -->
+                            <div class="col-md-6">
+                                <label for="editHeightIndoor" class="form-label">{{ .lcl.height_indoor }}</label>
+                                <input type="text" class="form-control" id="editHeightIndoor" maxlength="255" placeholder="{{ .lcl.height_placeholder }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editHeightOutdoor" class="form-label">{{ .lcl.height_outdoor }}</label>
+                                <input type="text" class="form-control" id="editHeightOutdoor" maxlength="255" placeholder="{{ .lcl.height_placeholder }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editYieldIndoor" class="form-label">{{ .lcl.yield_indoor }}</label>
+                                <input type="text" class="form-control" id="editYieldIndoor" maxlength="255" placeholder="{{ .lcl.yield_placeholder }}">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="editYieldOutdoor" class="form-label">{{ .lcl.yield_outdoor }}</label>
+                                <input type="text" class="form-control" id="editYieldOutdoor" maxlength="255" placeholder="{{ .lcl.yield_placeholder }}">
+                            </div>
                         </div>
                     </div>
                 </div>

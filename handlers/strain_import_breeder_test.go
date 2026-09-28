@@ -19,7 +19,7 @@ import (
 
 const importBreederPassword = "import-breeder-pw"
 
-const fakeStraincompassList = `{"strains":[{"slug":"blue-dream","name":"Blue Dream","breeder":"Seed Supreme","indicaPercent":40,"sativaPercent":60,"floweringTimeMax":9,"lineage":"Blueberry x (Haze x Super Silver Haze)"}],"total":1}`
+const fakeStraincompassList = `{"strains":[{"slug":"blue-dream","name":"Blue Dream","breeder":"Seed Supreme","indicaPercent":40,"sativaPercent":60,"floweringTimeMax":9,"lineage":"Blueberry x (Haze x Super Silver Haze)","heightIndoor":" 90-150cm ","yieldIndoor":"450-550 g/m²","heightOutdoor":null,"yieldOutdoor":null}],"total":1}`
 
 const fakeCannadbURI = "at://did:plc:test/org.cannadb.strain/runtz"
 
@@ -239,6 +239,34 @@ func TestStraincompassImport_KeepsHandEnteredAttributes(t *testing.T) {
 	})
 	require.Equal(t, http.StatusOK, status)
 	assert.Equal(t, 1, s.count(t, "SELECT COUNT(*) FROM strain_terpene WHERE strain_id = $1 AND name = 'Pinene'", got.ID))
+}
+
+func TestStraincompassImport_HeightAndYield(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	breeder := testutil.SeedBreeder(t, s.db, "Local Breeder")
+
+	status, got := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	var hIn, yIn, hOut sql.NullString
+	require.NoError(t, s.db.QueryRow("SELECT height_indoor, yield_indoor, height_outdoor FROM strain WHERE id = $1", got.ID).Scan(&hIn, &yIn, &hOut))
+	assert.Equal(t, "90-150cm", hIn.String, "trimmed")
+	assert.Equal(t, "450-550 g/m²", yIn.String)
+	assert.False(t, hOut.Valid, "missing upstream value stays NULL")
+
+	// Values the user typed in survive a re-import that has none for them.
+	testutil.MustExec(t, s.db, "UPDATE strain SET height_outdoor = '2-3 m', thc_min = 18 WHERE id = $1", got.ID)
+	status, _ = s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+	var thcMin sql.NullFloat64
+	require.NoError(t, s.db.QueryRow("SELECT height_outdoor, thc_min FROM strain WHERE id = $1", got.ID).Scan(&hOut, &thcMin))
+	assert.Equal(t, "2-3 m", hOut.String)
+	assert.Equal(t, 18.0, thcMin.Float64)
 }
 
 func TestCannadbImport_SameStrainTwoBreedersIsTwoRows(t *testing.T) {

@@ -83,7 +83,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 description: descriptionTextarea.value,
                 short_desc: document.getElementById("editStrainShortDescription").value,
                 cycle_time: parseInt(document.getElementById("editCycleTime").value, 10),
-                url: document.getElementById("editUrl").value
+                url: document.getElementById("editUrl").value,
+                growing: {
+                    height_indoor: document.getElementById("editHeightIndoor").value,
+                    height_outdoor: document.getElementById("editHeightOutdoor").value,
+                    yield_indoor: document.getElementById("editYieldIndoor").value,
+                    yield_outdoor: document.getElementById("editYieldOutdoor").value,
+                },
             };
 
             fetch("/strains", {

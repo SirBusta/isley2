@@ -234,8 +234,19 @@ func mapStraincompassStrain(rec *straincompassStrain) types.Strain {
 		StraincompassQuality:     rec.QualityScore,
 		StraincompassSources:     strings.Join(rec.Sources, ","),
 		StraincompassLineageNote: rec.Lineage,
+		HeightIndoor:             trimmedStr(rec.HeightIndoor),
+		HeightOutdoor:            trimmedStr(rec.HeightOutdoor),
+		YieldIndoor:              trimmedStr(rec.YieldIndoor),
+		YieldOutdoor:             trimmedStr(rec.YieldOutdoor),
 	}
 	return strain
+}
+
+func trimmedStr(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return strings.TrimSpace(*p)
 }
 
 // normalizeIndicaSativa reconciles StrainCompass's independent
@@ -318,17 +329,22 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			UPDATE strain
 			SET name = $1, breeder_id = $2, indica = $3, sativa = $4,
 			    description = $5, short_desc = $6, cycle_time = $7,
-			    straincompass_updated_at = $8, thc_min = $9, thc_max = $10,
-			    cbd_min = $11, cbd_max = $12, cbn_max = $13, cbg_max = $14,
+			    straincompass_updated_at = $8,
+			    thc_min = COALESCE($9, thc_min), thc_max = COALESCE($10, thc_max),
+			    cbd_min = COALESCE($11, cbd_min), cbd_max = COALESCE($12, cbd_max),
+			    cbn_max = COALESCE($13, cbn_max), cbg_max = COALESCE($14, cbg_max),
 			    straincompass_verified = $15, straincompass_quality_score = $16,
-			    straincompass_sources = $17, straincompass_lineage_note = $18
-			WHERE id = $19`,
+			    straincompass_sources = $17, straincompass_lineage_note = $18,
+			    height_indoor = COALESCE($19, height_indoor), height_outdoor = COALESCE($20, height_outdoor),
+			    yield_indoor = COALESCE($21, yield_indoor), yield_outdoor = COALESCE($22, yield_outdoor)
+			WHERE id = $23`,
 			s.Name, breederID, s.Indica, s.Sativa,
 			s.Description, s.ShortDescription, s.CycleTime,
 			nullableStr(s.StraincompassUpdatedAt), s.ThcMin, s.ThcMax,
 			s.CbdMin, s.CbdMax, s.CbnMax, s.CbgMax,
 			verified, s.StraincompassQuality,
-			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote), id)
+			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote),
+			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), id)
 		return id, uerr
 	case errors.Is(err, sql.ErrNoRows):
 		ierr := db.QueryRow(`
@@ -337,15 +353,17 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			                    straincompass_slug, straincompass_updated_at,
 			                    thc_min, thc_max, cbd_min, cbd_max, cbn_max, cbg_max,
 			                    straincompass_verified, straincompass_quality_score,
-			                    straincompass_sources, straincompass_lineage_note)
-			VALUES ($1, $2, $3, $4, 0, 0, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			                    straincompass_sources, straincompass_lineage_note,
+			                    height_indoor, height_outdoor, yield_indoor, yield_outdoor)
+			VALUES ($1, $2, $3, $4, 0, 0, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 			RETURNING id`,
 			s.Name, breederID, s.Indica, s.Sativa,
 			s.Description, s.ShortDescription, s.CycleTime,
 			s.StraincompassSlug, nullableStr(s.StraincompassUpdatedAt),
 			s.ThcMin, s.ThcMax, s.CbdMin, s.CbdMax, s.CbnMax, s.CbgMax,
 			verified, s.StraincompassQuality,
-			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote)).Scan(&id)
+			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote),
+			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor)).Scan(&id)
 		return id, ierr
 	default:
 		return 0, err

@@ -86,6 +86,32 @@ func validateStrainAttributeGroup(field string, attrs []types.StrainAttribute) e
 	return nil
 }
 
+// strainGrowingInfo is the editable height/yield block; empty strings are
+// stored as NULL.
+type strainGrowingInfo struct {
+	HeightIndoor  string `json:"height_indoor"`
+	HeightOutdoor string `json:"height_outdoor"`
+	YieldIndoor   string `json:"yield_indoor"`
+	YieldOutdoor  string `json:"yield_outdoor"`
+}
+
+// normalize trims every field and rejects overlong values.
+func (g *strainGrowingInfo) normalize() error {
+	for _, f := range []struct {
+		name string
+		val  *string
+	}{
+		{"height_indoor", &g.HeightIndoor}, {"height_outdoor", &g.HeightOutdoor},
+		{"yield_indoor", &g.YieldIndoor}, {"yield_outdoor", &g.YieldOutdoor},
+	} {
+		*f.val = strings.TrimSpace(*f.val)
+		if err := utils.ValidateStringLength(f.name, *f.val, utils.MaxNameLength); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // strainCannabinoids is the editable cannabinoid block; nil fields are
 // stored as NULL (unknown).
 type strainCannabinoids struct {
