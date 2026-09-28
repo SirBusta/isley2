@@ -116,7 +116,10 @@
     <!-- Empty state -->
     <div id="emptyState" class="strains-empty" style="display:none;">
         <i class="fa-solid fa-cannabis fa-3x text-muted mb-3"></i>
-        <p class="text-muted">No strains match your filters.</p>
+        <p class="text-muted" id="emptyStateText">{{ .lcl.strains_no_match }}</p>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="emptyShowOutOfStock" style="display:none;">
+            <i class="fa-solid fa-box-open me-1"></i> {{ .lcl.strains_show_out_of_stock }}
+        </button>
     </div>
 </div>
 
@@ -134,6 +137,13 @@ document.addEventListener("DOMContentLoaded", () => {
     const resultCount = document.getElementById("resultCount");
     const viewButtons = document.querySelectorAll(".view-button");
     const layoutButtons = document.querySelectorAll(".layout-toggle");
+    const emptyStateText = document.getElementById("emptyStateText");
+    const emptyShowOutOfStock = document.getElementById("emptyShowOutOfStock");
+    const lcl = {
+        noMatch: "{{ .lcl.strains_no_match }}",
+        noneInStock: "{{ .lcl.strains_none_in_stock }}",
+        addedOutOfStock: "{{ .lcl.strains_added_out_of_stock }}",
+    };
 
     let currentView = "in-stock";
     let currentLayout = localStorage.getItem("strainsLayout") || "cards";
@@ -157,7 +167,8 @@ document.addEventListener("DOMContentLoaded", () => {
         cardsContainer.innerHTML = `<div class="text-center py-5" style="flex-basis:100%"><div class="spinner-border text-primary" role="status"></div></div>`;
         tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
         try {
-            const res = await fetch(`/strains/${view}`);
+            // no-store: on Back navigation the browser otherwise replays a stale cached list.
+            const res = await fetch(`/strains/${view}`, { cache: "no-store" });
             allStrains = await res.json() || [];
             populateBreederFilter();
             applyFilters();
@@ -243,6 +254,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.length === 0) {
             cardsContainer.innerHTML = "";
             tableBody.innerHTML = "";
+            const inStockEmpty = currentView === "in-stock" && allStrains.length === 0;
+            emptyStateText.textContent = inStockEmpty ? lcl.noneInStock : lcl.noMatch;
+            emptyShowOutOfStock.style.display = inStockEmpty ? "" : "none";
             emptyState.style.display = "flex";
             return;
         }
@@ -464,6 +478,28 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    function showView(view) {
+        const btn = document.querySelector(`.view-button[data-view="${view}"]`);
+        if (btn) btn.click();
+    }
+
+    emptyShowOutOfStock.addEventListener("click", () => showView("out-of-stock"));
+
+    // Import modals live in separate scripts, so they reach the list through this hook.
+    window.isleyStrains = {
+        async refreshAfterAdd(id, name) {
+            await fetchStrains(currentView);
+            if (currentView === "in-stock" && !allStrains.some(s => s.id === id)) {
+                if (window.uiMessages) uiMessages.showToast(lcl.addedOutOfStock.replace("{name}", name || ""), "info");
+            }
+        },
+    };
+
+    // A Back/Forward restore from the bfcache skips DOMContentLoaded, leaving a stale list.
+    window.addEventListener("pageshow", (e) => {
+        if (e.persisted) fetchStrains(currentView);
+    });
+
     // ----- Initial load -----
     fetchStrains(currentView);
 });
@@ -563,7 +599,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     btn.classList.remove("btn-success");
                     btn.classList.add("btn-outline-secondary");
                     btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>' + esc(lcl.imported);
-                    if (typeof fetchStrains === "function") fetchStrains(typeof currentView !== "undefined" ? currentView : "in-stock");
+                    if (window.isleyStrains) isleyStrains.refreshAfterAdd(data.id, data.name);
                 })
                 .catch((err) => {
                     if (window.uiMessages) uiMessages.showToast(err.message || lcl.importFailed, "danger");
@@ -687,7 +723,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     btn.classList.remove("btn-success");
                     btn.classList.add("btn-outline-secondary");
                     btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>' + esc(lcl.imported);
-                    if (typeof fetchStrains === "function") fetchStrains(typeof currentView !== "undefined" ? currentView : "in-stock");
+                    if (window.isleyStrains) isleyStrains.refreshAfterAdd(data.id, data.name || name);
                 })
                 .catch((err) => {
                     if (window.uiMessages) uiMessages.showToast(err.message || lcl.importFailed, "danger");
