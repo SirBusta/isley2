@@ -41,19 +41,19 @@
                             <!-- Breeder -->
                             <div class="col-md-6">
                                 <label for="editBreederSelect" class="form-label required">{{ .lcl.breeder }}</label>
-                                <select class="form-select" id="editBreederSelect" required>
-                                    <option value="" disabled selected>Select breeder...</option>
+                                <select class="form-select" id="editBreederSelect" required
+                                        data-ac-placeholder="{{ .lcl.breeder_search_placeholder }}"
+                                        data-ac-new-text="{{ .lcl.breeder_add_new_named }}"
+                                        data-ac-did-you-mean="{{ .lcl.autocomplete_did_you_mean }}"
+                                        data-ac-suggested="{{ .lcl.autocomplete_suggested }}"
+                                        data-ac-results="{{ .lcl.autocomplete_results }}">
+                                    <option value="" selected></option>
                                     {{ range .breeders }}
                                     <option value="{{ .ID }}">{{ .Name }}</option>
                                     {{ end }}
                                     <option value="new">{{ .lcl.add_new_breeder }}</option>
                                 </select>
-                            </div>
-
-                            <!-- New Breeder Input (hidden by default) -->
-                            <div class="col-12 d-none" id="editNewBreederInput">
-                                <label for="editNewBreederName" class="form-label">{{ .lcl.new_breeder_name }}</label>
-                                <input type="text" class="form-control" id="editNewBreederName" placeholder="{{ .lcl.new_breeder_placeholder }}">
+                                <input type="hidden" id="editNewBreederName">
                             </div>
 
                             <!-- URL -->

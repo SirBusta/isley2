@@ -2,12 +2,14 @@ package handlers
 
 import (
 	"database/sql"
+	"errors"
 	"isley/logger"
 	model "isley/model"
 	"isley/model/types"
 	"isley/utils"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -16,10 +18,61 @@ import (
 // Breeder helpers & handlers
 // ---------------------------------------------------------------------------
 
+// rowQuerier is satisfied by both *sql.DB and *sql.Tx.
+type rowQuerier interface {
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+var errBreederNameRequired = errors.New("breeder name is required")
+
+// findOrCreateBreeder returns the id of the breeder whose name matches name
+// case-insensitively (after trimming), inserting it if none exists, so
+// "Seed Junky" typed twice never yields two breeder rows. created reports
+// whether a row was inserted. LOWER() folds ASCII only on SQLite.
+func findOrCreateBreeder(q rowQuerier, name string) (id int, created bool, err error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return 0, false, errBreederNameRequired
+	}
+	err = q.QueryRow("SELECT id FROM breeder WHERE LOWER(name) = LOWER($1) ORDER BY id LIMIT 1", name).Scan(&id)
+	if err == nil {
+		return id, false, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, false, err
+	}
+	if err = q.QueryRow("INSERT INTO breeder (name) VALUES ($1) RETURNING id", name).Scan(&id); err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
+// resolveRequestBreeder turns a request's breeder_id / new_breeder pair into
+// a breeder id, writing the API error response itself when it can't.
+func resolveRequestBreeder(c *gin.Context, db *sql.DB, breederID *int, newBreeder string) (int, bool) {
+	if breederID != nil {
+		return *breederID, true
+	}
+	id, created, err := findOrCreateBreeder(db, newBreeder)
+	if errors.Is(err, errBreederNameRequired) {
+		apiBadRequest(c, "api_new_breeder_name_required")
+		return 0, false
+	}
+	if err != nil {
+		logger.Log.WithField("func", "resolveRequestBreeder").WithError(err).Error("Failed to add new breeder")
+		apiInternalError(c, "api_failed_to_add_new_breeder")
+		return 0, false
+	}
+	if created {
+		ConfigStoreFromContext(c).SetBreeders(GetBreeders(db))
+	}
+	return id, true
+}
+
 func GetBreeders(db *sql.DB) []types.Breeder {
 	fieldLogger := logger.Log.WithField("func", "GetBreeders")
 
-	rows, err := db.Query("SELECT id, name FROM breeder")
+	rows, err := db.Query("SELECT id, name FROM breeder ORDER BY LOWER(name), id")
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to query breeders")
 		return nil
@@ -54,18 +107,18 @@ func AddBreederHandler(c *gin.Context) {
 		return
 	}
 
-	// Add breeder to database
 	db := DBFromContext(c)
-
-	// Insert new breeder and return new id
-	var id int
-	err := db.QueryRow("INSERT INTO breeder (name) VALUES ($1) RETURNING id", breeder.Name).Scan(&id)
+	id, created, err := findOrCreateBreeder(db, breeder.Name)
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to add breeder")
 		apiInternalError(c, "api_failed_to_add_breeder")
 		return
 	}
-	ConfigStoreFromContext(c).AppendBreeder(types.Breeder{ID: id, Name: breeder.Name})
+	if !created {
+		c.JSON(http.StatusOK, gin.H{"id": id, "existing": true})
+		return
+	}
+	ConfigStoreFromContext(c).SetBreeders(GetBreeders(db))
 
 	c.JSON(http.StatusCreated, gin.H{"id": id})
 }
@@ -345,31 +398,9 @@ func AddStrainHandler(c *gin.Context) {
 	db := DBFromContext(c)
 	store := ConfigStoreFromContext(c)
 
-	// Check for new breeder and insert if needed
-	var breederID int
-	if req.BreederID == nil {
-		if req.NewBreeder == "" {
-			fieldLogger.Error("New breeder name is required")
-			apiBadRequest(c, "api_new_breeder_name_required")
-			return
-		}
-
-		// Insert new breeder
-		insertBreederStmt := `
-			INSERT INTO breeder (name)
-			VALUES ($1)
-		 RETURNING id`
-		err := db.QueryRow(insertBreederStmt, req.NewBreeder).Scan(&breederID)
-		if err != nil {
-			fieldLogger.WithError(err).Error("Failed to insert new breeder")
-			apiInternalError(c, "api_failed_to_add_new_breeder")
-			return
-		}
-
-		store.SetBreeders(GetBreeders(db))
-	} else {
-		// Use existing breeder ID
-		breederID = *req.BreederID
+	breederID, ok := resolveRequestBreeder(c, db, req.BreederID, req.NewBreeder)
+	if !ok {
+		return
 	}
 
 	// Insert the new strain into the database
@@ -480,31 +511,9 @@ func UpdateStrainHandler(c *gin.Context) {
 	// Open the database
 	db := DBFromContext(c)
 
-	// Determine the breeder ID
-	var breederID int
-	if req.BreederID == nil {
-		if req.NewBreeder == "" {
-			fieldLogger.Error("New breeder name is required")
-			apiBadRequest(c, "api_new_breeder_name_required")
-			return
-		}
-
-		// Insert the new breeder into the database
-		insertBreederStmt := `
-			INSERT INTO breeder (name)
-			VALUES ($1)
-			RETURNING id
-		`
-		err := db.QueryRow(insertBreederStmt, req.NewBreeder).Scan(&breederID)
-		if err != nil {
-			fieldLogger.WithError(err).Error("Failed to insert new breeder")
-			apiInternalError(c, "api_failed_to_add_new_breeder")
-			return
-		}
-
-		ConfigStoreFromContext(c).SetBreeders(GetBreeders(db))
-	} else {
-		breederID = *req.BreederID
+	breederID, ok := resolveRequestBreeder(c, db, req.BreederID, req.NewBreeder)
+	if !ok {
+		return
 	}
 
 	// Update the strain in the database

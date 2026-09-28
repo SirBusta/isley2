@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const strainSelect = document.getElementById("strainSelect");
     const newStrainCard = document.getElementById("newStrainCard");
     const breederSelect = document.getElementById("breederSelect");
-    const newBreederInput = document.getElementById("newBreederInput");
+    const newBreederName = document.getElementById("newBreederName");
     const parentPlantDropdown = document.getElementById("parentPlantDropdown");
     const parentPlantSelect = document.getElementById("parentPlantSelect");
     const isClone = document.getElementById("isClone");
@@ -18,28 +18,16 @@ document.addEventListener("DOMContentLoaded", () => {
     const strainAC = new IsleyAutocomplete(strainSelect, {
         placeholder: "Type to search strains...",
     });
+    const breederAC = IsleyAutocomplete.breederPicker(breederSelect, newBreederName);
 
     // Show/Hide New Zone Input
     zoneSelect.addEventListener("change", () => {
         newZoneInput.classList.toggle("d-none", zoneSelect.value !== "new");
     });
 
-    // Show/Hide New Breeder Input to match breederSelect's current value.
-    // Called both on breederSelect's own change AND whenever the New
-    // Strain card is revealed, because when there are zero breeders yet
-    // "Add New Breeder" is the sole/default <option> — the select is
-    // already on "new" without the user ever changing it, so a
-    // change-only listener never fires and the input stayed hidden.
-    function syncNewBreederInput() {
-        newBreederInput.classList.toggle("d-none", breederSelect.value !== "new");
-    }
-
     // Show/Hide New Strain Card
     strainSelect.addEventListener("change", () => {
         newStrainCard.classList.toggle("d-none", strainSelect.value !== "new");
-        if (strainSelect.value === "new") {
-            syncNewBreederInput();
-        }
 
         // Load parent plants for selected strain
         if (strainSelect.value !== "new" && strainSelect.value) {
@@ -57,11 +45,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 .catch(() => {});
         }
         updatePreview();
-    });
-
-    // Show/Hide New Breeder Input
-    breederSelect.addEventListener("change", () => {
-        syncNewBreederInput();
     });
 
     // Show/Hide Parent Plant Dropdown
@@ -121,6 +104,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
         formHelpers.clearFieldError(zoneAC.input);
         formHelpers.clearFieldError(strainAC.input);
+        formHelpers.clearFieldError(breederAC.input);
+        breederAC.commit();
 
         // The autocomplete only sets zoneSelect/strainSelect's value when an
         // existing item or "Add New" is explicitly chosen from its dropdown.
@@ -134,6 +119,10 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         if (strainSelect.value === "") {
             formHelpers.setFieldError(strainAC.input, uiMessages.t('api_strain_required'));
+            hasError = true;
+        }
+        if (strainSelect.value === "new" && breederSelect.value === "") {
+            formHelpers.setFieldError(breederAC.input, uiMessages.t('api_new_breeder_name_required'));
             hasError = true;
         }
         if (hasError) return;
@@ -150,7 +139,7 @@ document.addEventListener("DOMContentLoaded", () => {
             new_strain: strainSelect.value === "new" ? {
                 name: document.getElementById("newStrainName").value,
                 breeder_id: breederSelect.value === "new" ? null : parseInt(breederSelect.value, 10),
-                new_breeder: breederSelect.value === "new" ? document.getElementById("newBreederName").value : null
+                new_breeder: breederSelect.value === "new" ? newBreederName.value : null
             } : null,
             status_id: parseInt(document.getElementById("statusSelect").value, 10),
             date: document.getElementById("startDate").value,

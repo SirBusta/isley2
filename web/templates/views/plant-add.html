@@ -95,16 +95,19 @@
                             </div>
                             <div class="col-md-6">
                                 <label for="breederSelect" class="form-label">{{ .lcl.breeder }}</label>
-                                <select class="form-select" id="breederSelect">
+                                <select class="form-select" id="breederSelect"
+                                        data-ac-placeholder="{{ .lcl.breeder_search_placeholder }}"
+                                        data-ac-new-text="{{ .lcl.breeder_add_new_named }}"
+                                        data-ac-did-you-mean="{{ .lcl.autocomplete_did_you_mean }}"
+                                        data-ac-suggested="{{ .lcl.autocomplete_suggested }}"
+                                        data-ac-results="{{ .lcl.autocomplete_results }}">
+                                    <option value="" selected></option>
                                     {{ range .breeders }}
                                     <option value="{{ .ID }}">{{ .Name }}</option>
                                     {{ end }}
                                     <option value="new">{{ .lcl.add_new_breeder }}</option>
                                 </select>
-                            </div>
-                            <div class="col-12 d-none" id="newBreederInput">
-                                <label for="newBreederName" class="form-label">{{ .lcl.new_breeder_name }}</label>
-                                <input type="text" class="form-control" id="newBreederName" placeholder="{{ .lcl.enter_breeder_name }}">
+                                <input type="hidden" id="newBreederName">
                             </div>
                         </div>
                     </div>

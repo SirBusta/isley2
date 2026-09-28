@@ -283,16 +283,15 @@ func CreateNewStrain(db *sql.DB, store *config.Store, newStrain *struct {
 	fieldLogger := logger.Log.WithField("func", "CreateNewStrain")
 	var breederId int
 
-	// Check if a new breeder needs to be added
-	if newStrain.BreederId == 0 && newStrain.NewBreeder != "" {
-		// Insert the new breeder into the `breeder` table
-		err := db.QueryRow("INSERT INTO breeder (name) VALUES ($1) RETURNING id", newStrain.NewBreeder).Scan(&breederId)
+	if newStrain.BreederId == 0 && strings.TrimSpace(newStrain.NewBreeder) != "" {
+		id, created, err := findOrCreateBreeder(db, newStrain.NewBreeder)
 		if err != nil {
 			fieldLogger.WithError(err).Error("Failed to insert new breeder")
 			return 0, fmt.Errorf("failed to insert new breeder: %w", err)
 		}
+		breederId = id
 
-		if store != nil {
+		if created && store != nil {
 			store.SetBreeders(GetBreeders(db))
 		}
 	} else {

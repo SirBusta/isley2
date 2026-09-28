@@ -118,6 +118,7 @@ func NewEngine(cfg Config) (*gin.Engine, error) {
 	r.Use(sessions.Sessions("isley_session", store))
 	r.Use(csrfMiddleware())
 	r.Use(dbMiddleware(cfg.DB))
+	r.Use(assetsMiddleware(cfg.Assets))
 	r.Use(configStoreMiddleware(configStore))
 	r.Use(pathDirsMiddleware(cfg.UploadDir, cfg.StreamDir, cfg.LogsDir))
 
@@ -264,6 +265,15 @@ func csrfMiddleware() gin.HandlerFunc {
 func dbMiddleware(db *sql.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Set("db", db)
+		c.Next()
+	}
+}
+
+// assetsMiddleware injects the engine's embedded asset FS so handlers can
+// read bundled data files (e.g. the breeder reference list).
+func assetsMiddleware(assets fs.FS) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		handlers.SetAssetsOnContext(c, assets)
 		c.Next()
 	}
 }

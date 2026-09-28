@@ -5,7 +5,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const strainSelect = document.getElementById("strainSelect");
     const newStrainCard = document.getElementById("newStrainCard");
     const breederSelect = document.getElementById("breederSelect");
-    const newBreederInput = document.getElementById("newBreederInput");
+    const newBreederName = document.getElementById("newBreederName");
     const deletePlantButton = document.getElementById("deletePlantButton");
     const plantId = document.getElementById("plantId").value;
 
@@ -27,16 +27,20 @@ document.addEventListener("DOMContentLoaded", () => {
         newStrainCard.classList.toggle("d-none", strainSelect.value !== "new");
     });
 
-    // Show/Hide New Breeder Input
-    if (breederSelect) {
-        breederSelect.addEventListener("change", () => {
-            newBreederInput.classList.toggle("d-none", breederSelect.value !== "new");
-        });
-    }
+    const breederAC = IsleyAutocomplete.breederPicker(breederSelect, newBreederName);
 
     // Form submission
     editPlantForm.addEventListener("submit", (e) => {
         e.preventDefault();
+
+        if (breederAC) {
+            breederAC.commit();
+            formHelpers.clearFieldError(breederAC.input);
+            if (strainSelect.value === "new" && breederSelect.value === "") {
+                formHelpers.setFieldError(breederAC.input, uiMessages.t('api_new_breeder_name_required'));
+                return;
+            }
+        }
 
         const submitBtn = editPlantForm.querySelector('button[type="submit"]');
         submitBtn.classList.add("is-loading");
@@ -46,7 +50,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const strainVal = strainSelect.value;
         const newZoneName = document.getElementById("newZoneName");
         const newStrainName = document.getElementById("newStrainName");
-        const newBreederName = document.getElementById("newBreederName");
 
         const payload = {
             plant_id: parseInt(plantId, 10),

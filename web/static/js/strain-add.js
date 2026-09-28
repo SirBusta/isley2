@@ -1,7 +1,7 @@
 document.addEventListener("DOMContentLoaded", () => {
     const form = document.getElementById("addStrainForm");
     const editBreederSelect = document.getElementById("editBreederSelect");
-    const editNewBreederInput = document.getElementById("editNewBreederInput");
+    const editNewBreederName = document.getElementById("editNewBreederName");
     const editIndicaSativaSlider = document.getElementById("editIndicaSativaSlider");
     const editIndicaLabel = document.getElementById("editIndicaLabel");
     const editSativaLabel = document.getElementById("editSativaLabel");
@@ -9,16 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const descriptionTextarea = document.getElementById("editStrainDescription");
     const markdownPreview = document.getElementById("markdownPreview");
 
-    // --- Breeder select: show/hide new breeder input ---
-    if (editBreederSelect) {
-        editBreederSelect.addEventListener("change", () => {
-            if (editBreederSelect.value === "new") {
-                editNewBreederInput.classList.remove("d-none");
-            } else {
-                editNewBreederInput.classList.add("d-none");
-            }
-        });
-    }
+    const breederAc = IsleyAutocomplete.breederPicker(editBreederSelect, editNewBreederName);
 
     // --- Indica/Sativa slider with live ratio bar preview ---
     if (editIndicaSativaSlider) {
@@ -75,11 +66,16 @@ document.addEventListener("DOMContentLoaded", () => {
     if (form) {
         form.addEventListener("submit", (e) => {
             e.preventDefault();
+            if (breederAc) breederAc.commit();
+            if (!editBreederSelect.value) {
+                if (breederAc) breederAc.input.reportValidity();
+                return;
+            }
 
             const payload = {
                 name: document.getElementById("editStrainName").value,
                 breeder_id: editBreederSelect.value === "new" ? null : parseInt(editBreederSelect.value, 10),
-                new_breeder: editBreederSelect.value === "new" ? document.getElementById("editNewBreederName").value : null,
+                new_breeder: editBreederSelect.value === "new" ? editNewBreederName.value : null,
                 indica: parseInt(editIndicaSativaSlider.value, 10),
                 sativa: 100 - parseInt(editIndicaSativaSlider.value, 10),
                 autoflower: document.getElementById("editAutoflower").value === "true",
