@@ -13,6 +13,7 @@
  *       maxResults:  10,                     // max dropdown items
  *
  *       // Free-text "add new" (e.g. breeders):
+ *       sublabel:        null,   // optional: function(option) => muted text shown after the label
  *       newFromText:     false,  // "Add new" uses the typed text; typing a name and leaving
  *                                // the field also counts as choosing it
  *       newNameInput:    null,   // element whose value receives the chosen new name
@@ -24,7 +25,7 @@
  *   // Programmatic control:
  *   ac.reset();            // clear the input + selection
  *   ac.setValue(id);       // select an option by value
- *   ac.setNewName(name);   // choose a new (not-yet-existing) name
+ *   ac.setNewName(name);   // choose a new (not-yet-existing) name; setNewName(name, false) skips matching existing options
  *   ac.getValue();         // get current select value
  *   ac.getNewName();       // the chosen new name ("" if an existing option is selected)
  *   ac.destroy();          // tear down and restore original select
@@ -55,6 +56,7 @@ class IsleyAutocomplete {
             newValue: "new",
             minChars: 1,
             maxResults: 10,
+            sublabel: null,
             newFromText: false,
             newNameInput: null,
             referenceSource: null,
@@ -147,11 +149,11 @@ class IsleyAutocomplete {
         this.select.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
-    /** Choose a name that isn't an existing option (existing matches win). */
-    setNewName(name) {
+    /** Choose a name that isn't an existing option (an existing exact match wins unless matchExisting is false). */
+    setNewName(name, matchExisting = true) {
         name = String(name || "").trim();
         if (!name) return;
-        const own = this._findExact(this._items, name);
+        const own = matchExisting ? this._uniqueExact(this._items, name) : null;
         if (own) {
             this._selectItem(own, true);
             return;
@@ -336,6 +338,7 @@ class IsleyAutocomplete {
                 value: val,
                 label: opt.textContent.trim(),
                 displayLabel: label,
+                sublabel: this.opts.sublabel ? (this.opts.sublabel(opt) || "") : "",
             });
         });
     }
@@ -400,6 +403,13 @@ class IsleyAutocomplete {
         return list.find(i => i.label.toLowerCase() === lower);
     }
 
+    /** The only item whose label equals text, or null when none or several do (e.g. one strain from two breeders). */
+    _uniqueExact(list, text) {
+        const lower = text.toLowerCase();
+        const hits = list.filter(i => i.label.toLowerCase() === lower);
+        return hits.length === 1 ? hits[0] : null;
+    }
+
     _renderDropdown(matches, query) {
         this.dropdown.innerHTML = "";
         this._activeIdx = -1;
@@ -420,6 +430,7 @@ class IsleyAutocomplete {
             div.setAttribute("role", "option");
             div.setAttribute("aria-selected", "false");
             div.innerHTML = this._highlightMatch(item.label, query) +
+                (item.sublabel ? ` <small class="text-muted">${this._escapeHtml(item.sublabel)}</small>` : "") +
                 (item.ref ? ` <small class="text-muted isley-ac-ref-tag">${this._escapeHtml(this.labels.suggested)}</small>` : "");
             div.addEventListener("mousedown", (e) => {
                 e.preventDefault();
@@ -527,7 +538,7 @@ class IsleyAutocomplete {
         const currentItem = this._items.find(i => String(i.value) === String(currentVal));
         if (currentItem && currentItem.label === text) return;
 
-        const exact = this._findExact(this._items, text);
+        const exact = this.opts.newFromText ? this._uniqueExact(this._items, text) : this._findExact(this._items, text);
         if (exact) {
             this._selectItem(exact, false);
             return;

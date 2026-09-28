@@ -133,15 +133,21 @@
                 <div class="card mb-4">
                     <div class="card-body">
                         <h2 class="h5 card-title text-primary mb-3">
-                            <i class="fa-solid fa-sitemap me-1"></i> Lineage (Parent Strains)
+                            <i class="fa-solid fa-sitemap me-1"></i> {{ .lcl.lineage_edit_title }}
                         </h2>
-                        <div id="lineageEditor">
+                        <div id="lineageEditor"
+                             data-placeholder="{{ .lcl.lineage_parent_placeholder }}"
+                             data-use-text="{{ .lcl.lineage_parent_use_text }}"
+                             data-results="{{ .lcl.autocomplete_results }}"
+                             data-linked="{{ .lcl.lineage_linked }}"
+                             data-unlinked="{{ .lcl.lineage_unlinked }}"
+                             data-remove="{{ .lcl.lineage_remove_parent }}">
                             <div id="lineageEntries"></div>
                             <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="addParentBtn">
-                                <i class="fa-solid fa-plus me-1"></i> Add Parent
+                                <i class="fa-solid fa-plus me-1"></i> {{ .lcl.lineage_add_parent }}
                             </button>
                         </div>
-                        <small class="text-muted d-block mt-2">Add parent strains to build a lineage tree. Type a name to search existing strains or enter a new name.</small>
+                        <small class="text-muted d-block mt-2">{{ .lcl.lineage_edit_help }}</small>
                     </div>
                 </div>
 
