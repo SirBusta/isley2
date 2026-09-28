@@ -12,12 +12,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (!treeContainer || !lineageCard || typeof currentStrainID === "undefined") return;
 
-    // Fetch lineage data via API
-    fetch(`/strains/${currentStrainID}/lineage`)
+    const opts = lineageCard.dataset;
+    // With a source lineage note shown below, an empty tree isn't "no lineage".
+    const showEmpty = () => { if (!opts.hasNote) emptyMsg.style.display = "block"; };
+
+    fetch(`/strains/${currentStrainID}/lineage`, { cache: "no-store" })
         .then(res => res.json())
         .then(lineageData => {
             if (!lineageData || lineageData.length === 0) {
-                emptyMsg.style.display = "block";
+                showEmpty();
                 return;
             }
 
@@ -41,13 +44,13 @@ document.addEventListener("DOMContentLoaded", () => {
             const toggle = document.createElement("button");
             toggle.className = "lineage-toggle";
             toggle.innerHTML = '<i class="fa-solid fa-chevron-down fa-xs"></i>';
-            toggle.title = "Show ancestry";
+            toggle.title = opts.showAncestry || "";
             rootName.insertBefore(toggle, rootName.firstChild);
 
             rootLi.appendChild(rootName);
 
             // Build the parent tree beneath the root
-            const parentTree = buildTree(lineageData);
+            const parentTree = buildTree(lineageData, opts);
             parentTree.className += " lineage-subtree";
             rootLi.appendChild(parentTree);
 
@@ -63,11 +66,11 @@ document.addEventListener("DOMContentLoaded", () => {
         })
         .catch(err => {
             console.error("Failed to load lineage:", err);
-            emptyMsg.style.display = "block";
+            showEmpty();
         });
 });
 
-function buildTree(parents) {
+function buildTree(parents, opts) {
     const ul = document.createElement("ul");
     ul.className = "lineage-tree";
 
@@ -90,9 +93,23 @@ function buildTree(parents) {
             const link = document.createElement("a");
             link.href = `/strain/new?name=${encodeURIComponent(parent.parent_name)}`;
             link.className = "lineage-link-missing";
-            link.title = `${parent.parent_name} — click to add as a new strain`;
+            link.title = (opts.addAsStrain || "{name}").replace("{name}", parent.parent_name);
             link.textContent = parent.parent_name;
             nameSpan.appendChild(link);
+        }
+
+        // StrainCompass has no per-parent ids, so link to its search for the name
+        // and let the user pick among the matches.
+        if (opts.straincompass) {
+            const ext = document.createElement("a");
+            ext.href = "https://straincompass.com/en/strains?q=" + encodeURIComponent(parent.parent_name);
+            ext.target = "_blank";
+            ext.rel = "noopener noreferrer";
+            ext.className = "lineage-ext-link ms-1 text-muted";
+            ext.title = (opts.searchStraincompass || "{name}").replace("{name}", parent.parent_name);
+            ext.setAttribute("aria-label", ext.title);
+            ext.innerHTML = '<i class="fa-solid fa-arrow-up-right-from-square fa-xs"></i>';
+            nameSpan.appendChild(ext);
         }
 
         li.appendChild(nameSpan);
@@ -102,10 +119,10 @@ function buildTree(parents) {
             const toggle = document.createElement("button");
             toggle.className = "lineage-toggle";
             toggle.innerHTML = '<i class="fa-solid fa-chevron-down fa-xs"></i>';
-            toggle.title = "Show ancestry";
+            toggle.title = opts.showAncestry || "";
             nameSpan.insertBefore(toggle, nameSpan.firstChild);
 
-            const childTree = buildTree(parent.children);
+            const childTree = buildTree(parent.children, opts);
             childTree.className += " lineage-subtree";
             li.appendChild(childTree);
 

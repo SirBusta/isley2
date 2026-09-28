@@ -19,7 +19,7 @@ import (
 
 const importBreederPassword = "import-breeder-pw"
 
-const fakeStraincompassList = `{"strains":[{"slug":"blue-dream","name":"Blue Dream","breeder":"Seed Supreme","indicaPercent":40,"sativaPercent":60,"floweringTimeMax":9}],"total":1}`
+const fakeStraincompassList = `{"strains":[{"slug":"blue-dream","name":"Blue Dream","breeder":"Seed Supreme","indicaPercent":40,"sativaPercent":60,"floweringTimeMax":9,"lineage":"Blueberry x (Haze x Super Silver Haze)"}],"total":1}`
 
 const fakeCannadbURI = "at://did:plc:test/org.cannadb.strain/runtz"
 
@@ -161,6 +161,64 @@ func TestStraincompassPreview_ReturnsListingBreeder(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
 	assert.Equal(t, "Blue Dream", got.Name)
 	assert.Equal(t, "Seed Supreme", got.Breeder)
+}
+
+func TestStraincompassImport_RecordsLineageFromNote(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	breeder := testutil.SeedBreeder(t, s.db, "Local Breeder")
+	blueberry := testutil.SeedStrain(t, s.db, breeder, "Blueberry")
+
+	status, got := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	rows, err := s.db.Query("SELECT parent_name, parent_strain_id FROM strain_lineage WHERE strain_id = $1 ORDER BY parent_name", got.ID)
+	require.NoError(t, err)
+	defer rows.Close()
+	type parent struct {
+		name string
+		link sql.NullInt64
+	}
+	var parents []parent
+	for rows.Next() {
+		var p parent
+		require.NoError(t, rows.Scan(&p.name, &p.link))
+		parents = append(parents, p)
+	}
+	require.NoError(t, rows.Err())
+	require.Len(t, parents, 2)
+	assert.Equal(t, "Blueberry", parents[0].name)
+	assert.Equal(t, int64(blueberry), parents[0].link.Int64, "a parent matching one local strain is linked")
+	assert.Equal(t, "Haze x Super Silver Haze", parents[1].name)
+	assert.False(t, parents[1].link.Valid)
+}
+
+func TestStraincompassImport_KeepsExistingLineage(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	breeder := testutil.SeedBreeder(t, s.db, "Local Breeder")
+
+	status, got := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	// The user replaces the parsed lineage with their own.
+	testutil.MustExec(t, s.db, "DELETE FROM strain_lineage WHERE strain_id = $1", got.ID)
+	testutil.MustExec(t, s.db, "INSERT INTO strain_lineage (strain_id, parent_name) VALUES ($1, 'My Own Parent')", got.ID)
+
+	status, _ = s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": breeder,
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	var n int
+	var name string
+	require.NoError(t, s.db.QueryRow("SELECT COUNT(*), MAX(parent_name) FROM strain_lineage WHERE strain_id = $1", got.ID).Scan(&n, &name))
+	assert.Equal(t, 1, n)
+	assert.Equal(t, "My Own Parent", name, "re-import must not overwrite the user's lineage")
 }
 
 func TestCannadbImport_SameStrainTwoBreedersIsTwoRows(t *testing.T) {

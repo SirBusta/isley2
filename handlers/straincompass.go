@@ -150,6 +150,10 @@ func StraincompassImportHandler(c *gin.Context) {
 		fieldLogger.WithError(err).Warn("Failed to import strain attributes")
 	}
 
+	if _, err := seedLineageFromNote(db, strainID, rec.Lineage); err != nil {
+		fieldLogger.WithError(err).Warn("Failed to record lineage from StrainCompass note")
+	}
+
 	// Refresh in-memory caches so the UI reflects the import immediately.
 	store.SetBreeders(GetBreeders(db))
 	store.SetStrains(GetStrains(db))

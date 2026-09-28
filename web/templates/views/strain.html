@@ -169,14 +169,19 @@
             </div>
 
             <!-- Lineage box -->
-            <div class="card strain-infobox mt-3" id="lineageCard">
+            <div class="card strain-infobox mt-3" id="lineageCard"
+                 data-has-note="{{ if .strain.StraincompassLineageNote }}1{{ end }}"
+                 data-straincompass="{{ if .strain.StraincompassSlug }}1{{ end }}"
+                 data-show-ancestry="{{ .lcl.lineage_show_ancestry }}"
+                 data-add-as-strain="{{ .lcl.lineage_add_as_strain }}"
+                 data-search-straincompass="{{ .lcl.lineage_search_straincompass }}">
                 <div class="card-body">
                     <h2 class="h5 card-title text-primary text-center mb-3">
-                        <i class="fa-solid fa-sitemap me-1"></i> Lineage
+                        <i class="fa-solid fa-sitemap me-1"></i> {{ .lcl.lineage_title }}
                     </h2>
                     <div id="lineageTree"></div>
                     <div id="lineageEmpty" class="text-center text-muted py-2" style="display:none;">
-                        <small>No lineage data recorded.</small>
+                        <small>{{ .lcl.lineage_none }}</small>
                     </div>
                     {{ if .strain.StraincompassLineageNote }}
                     <p class="small text-muted mt-2 mb-0">
@@ -233,7 +238,7 @@
             <div class="card strain-infobox mt-3" id="descendantsCard" style="display:none;">
                 <div class="card-body">
                     <h2 class="h5 card-title text-primary text-center mb-3">
-                        <i class="fa-solid fa-diagram-project me-1"></i> Descendants
+                        <i class="fa-solid fa-diagram-project me-1"></i> {{ .lcl.descendants_title }}
                     </h2>
                     <div id="descendantsList"></div>
                 </div>

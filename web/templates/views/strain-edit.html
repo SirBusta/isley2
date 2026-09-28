@@ -148,6 +148,11 @@
                             </button>
                         </div>
                         <small class="text-muted d-block mt-2">{{ .lcl.lineage_edit_help }}</small>
+                        {{ if .strain.StraincompassLineageNote }}
+                        <small class="text-muted d-block mt-1">
+                            <i class="fa-solid fa-flask me-1"></i>{{ .lcl.straincompass_lineage_label }}: {{ .strain.StraincompassLineageNote }}
+                        </small>
+                        {{ end }}
                     </div>
                 </div>
 
