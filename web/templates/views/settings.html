@@ -167,6 +167,31 @@ color: #0d6efd; /* Primary color */
                     </div>
                 </div>
 
+                <!-- Breeder suggestions (reference list) -->
+                <div class="card mb-4 shadow-sm border-start border-4 border-secondary" id="breederListCard"
+                     data-status-bundled="{{ .lcl.breeder_list_status_bundled }}"
+                     data-status-refreshed="{{ .lcl.breeder_list_status_refreshed }}"
+                     data-last-checked="{{ .lcl.breeder_list_last_checked }}"
+                     data-last-error="{{ .lcl.breeder_list_last_error }}"
+                     data-refreshing="{{ .lcl.breeder_list_refreshing }}">
+                    <div class="card-header bg-themed">
+                        <h2 class="h5 card-title mb-0"><i class="fa fa-list me-2"></i>{{ .lcl.settings_breeder_list }}</h2>
+                    </div>
+                    <div class="card-body">
+                        <small class="text-muted d-block mb-3">{{ .lcl.breeder_list_desc }}</small>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="breederListAutoRefresh">
+                            <label class="form-check-label" for="breederListAutoRefresh">{{ .lcl.breeder_list_auto_refresh }}</label>
+                        </div>
+                        <div class="mt-3 small" id="breederListStatus"></div>
+                        <div class="small text-muted" id="breederListChecked"></div>
+                        <div class="small text-warning" id="breederListError"></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-3" id="breederListRefreshBtn">
+                            <i class="fa fa-rotate me-1"></i><span>{{ .lcl.breeder_list_refresh_now }}</span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- General Settings -->
                 <div class="card mb-4 shadow-sm border-start border-4 border-info">
                     <div class="card-header bg-themed">
@@ -2422,6 +2447,66 @@ color: #0d6efd; /* Primary color */
         }
     });
 
+</script>
+
+<script nonce="{{ .cspNonce }}">
+    document.addEventListener("DOMContentLoaded", () => {
+        const card = document.getElementById("breederListCard");
+        if (!card) return;
+        const toggle = document.getElementById("breederListAutoRefresh");
+        const statusEl = document.getElementById("breederListStatus");
+        const checkedEl = document.getElementById("breederListChecked");
+        const errorEl = document.getElementById("breederListError");
+        const btn = document.getElementById("breederListRefreshBtn");
+        const btnLabel = btn.querySelector("span").textContent;
+        const d = card.dataset;
+
+        function fmt(iso) {
+            const t = iso ? new Date(iso) : null;
+            return t && !isNaN(t) ? t.toLocaleString() : "";
+        }
+
+        function render(s) {
+            if (!s) return;
+            toggle.checked = !!s.auto_refresh;
+            statusEl.textContent = (s.source === "refreshed" ? d.statusRefreshed : d.statusBundled)
+                .replace("{count}", s.count).replace("{date}", fmt(s.last_updated));
+            checkedEl.textContent = s.last_attempt ? d.lastChecked.replace("{date}", fmt(s.last_attempt)) : "";
+            errorEl.textContent = s.last_error ? d.lastError.replace("{error}", s.last_error) : "";
+        }
+
+        fetch("/breeders/reference/status").then(r => r.json()).then(render).catch(() => {});
+
+        toggle.addEventListener("change", () => {
+            fetch("/breeders/reference/settings", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ auto_refresh: toggle.checked }),
+            })
+                .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+                .then(render)
+                .catch(() => {
+                    toggle.checked = !toggle.checked;
+                    uiMessages.showToast(uiMessages.t("api_failed_to_save_settings"), "danger");
+                });
+        });
+
+        btn.addEventListener("click", () => {
+            btn.disabled = true;
+            btn.querySelector("span").textContent = d.refreshing;
+            fetch("/breeders/reference/refresh", { method: "POST" })
+                .then(r => r.json().then(data => ({ ok: r.ok, data })))
+                .then(({ ok, data }) => {
+                    render(data.status);
+                    uiMessages.showToast(ok ? data.message : (data.error || ""), ok ? "success" : "danger");
+                })
+                .catch(() => uiMessages.showToast(uiMessages.t("api_breeder_reference_refresh_failed"), "danger"))
+                .finally(() => {
+                    btn.disabled = false;
+                    btn.querySelector("span").textContent = btnLabel;
+                });
+        });
+    });
 </script>
 
 <!--Embed the footer.html template at this location-->

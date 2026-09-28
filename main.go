@@ -173,6 +173,12 @@ func main() {
 		grabber.Run(ctx)
 	}()
 
+	bgWG.Add(1)
+	go func() {
+		defer bgWG.Done()
+		handlers.RunBreederReferenceRefresher(ctx, db, embeddedFiles)
+	}()
+
 	srv := &http.Server{
 		Addr:    ":" + port,
 		Handler: engine,

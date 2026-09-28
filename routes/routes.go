@@ -365,6 +365,9 @@ func AddProtectedApiRoutes(r *gin.RouterGroup) {
 	r.DELETE("/streams/:id", handlers.DeleteStreamHandler)
 
 	r.GET("/breeders/reference", handlers.BreederReferenceHandler)
+	r.GET("/breeders/reference/status", handlers.BreederReferenceStatusHandler)
+	r.POST("/breeders/reference/settings", handlers.BreederReferenceSettingsHandler)
+	r.POST("/breeders/reference/refresh", handlers.BreederReferenceRefreshHandler)
 	r.POST("/breeders", handlers.AddBreederHandler)
 	r.PUT("/breeders/:id", handlers.UpdateBreederHandler)
 	r.DELETE("/breeders/:id", handlers.DeleteBreederHandler)
