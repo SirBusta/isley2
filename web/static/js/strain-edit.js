@@ -12,6 +12,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const breederAc = IsleyAutocomplete.breederPicker(editBreederSelect, editNewBreederName);
 
+    // "Flowering Time" for photoperiods, "Seed to Harvest" for autoflowers.
+    const autoflowerSelect = document.getElementById("editAutoflower");
+    if (autoflowerSelect) {
+        autoflowerSelect.addEventListener("change", () => {
+            const mode = autoflowerSelect.value === "true" ? "auto" : "photo";
+            ["editCycleTimeLabel", "editCycleTimeDesc"].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = el.dataset[mode];
+            });
+        });
+    }
+
     // --- Cannabinoids + effects/flavors/terpenes/medical-uses lists ---
     const profileCard = document.getElementById("strainProfileCard");
     const removeLabel = profileCard ? profileCard.dataset.remove : "";

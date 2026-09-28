@@ -112,12 +112,14 @@
 
                             <!-- Cycle Time -->
                             <div class="col-md-6">
-                                <label for="editCycleTime" class="form-label required">{{ .lcl.cycle_time }}</label>
+                                <label for="editCycleTime" class="form-label required" id="editCycleTimeLabel"
+                                       data-photo="{{ .lcl.flowering_time }}" data-auto="{{ .lcl.seed_to_harvest }}">{{ if .strain.Autoflower }}{{ .lcl.seed_to_harvest }}{{ else }}{{ .lcl.flowering_time }}{{ end }}</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="editCycleTime" min="0" value="{{ .strain.CycleTime }}" required>
                                     <span class="input-group-text">{{ .lcl.title_days }}</span>
                                 </div>
-                                <small class="text-muted">{{ .lcl.cycle_time_desc }}</small>
+                                <small class="text-muted" id="editCycleTimeDesc"
+                                       data-photo="{{ .lcl.flowering_time_desc }}" data-auto="{{ .lcl.seed_to_harvest_desc }}">{{ if .strain.Autoflower }}{{ .lcl.seed_to_harvest_desc }}{{ else }}{{ .lcl.flowering_time_desc }}{{ end }}</small>
                             </div>
 
                             <!-- Seed Count -->
