@@ -11,6 +11,7 @@ import (
 
 	"isley/logger"
 	"isley/model/types"
+	"isley/utils"
 )
 
 // ---------------------------------------------------------------------------
@@ -87,6 +88,11 @@ func StraincompassImportHandler(c *gin.Context) {
 		// (e.g. "permanent-marker") won't resolve. The search results the
 		// frontend renders already carry the name, so it's sent along.
 		Name string `json:"name"`
+		// The breeder the user bought from. StrainCompass's own breeder is
+		// per listing and often a reseller, so the user's choice wins; when
+		// neither is sent, the listing's breeder is used.
+		BreederID  *int   `json:"breeder_id"`
+		NewBreeder string `json:"new_breeder"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiBadRequest(c, "api_invalid_request_payload")
@@ -95,6 +101,10 @@ func StraincompassImportHandler(c *gin.Context) {
 	req.Slug = strings.TrimSpace(req.Slug)
 	if req.Slug == "" {
 		apiBadRequest(c, "api_straincompass_invalid_slug")
+		return
+	}
+	if err := utils.ValidateStringLength("new_breeder", req.NewBreeder, utils.MaxNameLength); err != nil {
+		apiBadRequest(c, err.Error())
 		return
 	}
 
@@ -113,10 +123,13 @@ func StraincompassImportHandler(c *gin.Context) {
 		return
 	}
 
-	// Resolve + upsert the breeder first so the strain FK resolves locally.
-	// StrainCompass has no separate breeder record/endpoint — it's a plain
-	// string on the strain — so this is pure name-dedupe.
-	breederID, err := importStraincompassBreeder(db, rec.Breeder)
+	breederID, err := resolveImportBreeder(db, req.BreederID, req.NewBreeder, func() (int, error) {
+		return importStraincompassBreeder(db, rec.Breeder)
+	})
+	if errors.Is(err, errImportBreederNotFound) {
+		apiBadRequest(c, "api_breeder_not_found")
+		return
+	}
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to resolve breeder")
 		apiInternalError(c, "api_straincompass_import_failed")
@@ -145,9 +158,34 @@ func StraincompassImportHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"id":                strainID,
 		"name":              strain.Name,
+		"breeder_id":        breederID,
+		"breeder":           breederName(db, breederID),
 		"straincompass_url": StraincompassWebURL(rec.Slug),
 		"message":           T(c, "api_straincompass_imported"),
 	})
+}
+
+// StraincompassPreviewHandler returns the listing's own breeder so the
+// import dialog can offer it as a one-click choice. The search endpoint the
+// dialog uses doesn't carry breeders.
+// GET /strains/straincompass/preview?slug=<slug>&name=<name>
+func StraincompassPreviewHandler(c *gin.Context) {
+	if !straincompassEnabled(c) {
+		apiBadRequest(c, "api_straincompass_disabled")
+		return
+	}
+	slug := strings.TrimSpace(c.Query("slug"))
+	if slug == "" {
+		apiBadRequest(c, "api_straincompass_invalid_slug")
+		return
+	}
+	store := ConfigStoreFromContext(c)
+	rec, err := straincompassGetStrainBySlug(store.StraincompassBaseURL(), store.StraincompassAPIKey(), slug, strings.TrimSpace(c.Query("name")))
+	if err != nil {
+		respondStraincompassError(c, err, "api_straincompass_search_failed")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"name": rec.Name, "breeder": strings.TrimSpace(rec.Breeder)})
 }
 
 // ---------------------------------------------------------------------------
@@ -248,26 +286,16 @@ func clampPercent(v int) int {
 // only — StrainCompass's breeder field is a plain string, not a fetchable
 // record, so there's no separate lookup call like CannaDB's.
 func importStraincompassBreeder(db *sql.DB, name string) (int, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
+	if strings.TrimSpace(name) == "" {
 		name = "Unknown Breeder"
 	}
-
-	var id int
-	err := db.QueryRow("SELECT id FROM breeder WHERE LOWER(name) = LOWER($1)", name).Scan(&id)
-	if err == nil {
-		return id, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-
-	err = db.QueryRow("INSERT INTO breeder (name) VALUES ($1) RETURNING id", name).Scan(&id)
+	id, _, err := findOrCreateBreeder(db, name)
 	return id, err
 }
 
 // upsertStraincompassStrain inserts a new strain or updates the existing one
-// keyed on straincompass_slug. Returns the strain id.
+// keyed on (straincompass_slug, breeder_id): the same listing bought from two
+// breeders is two strains. Returns the strain id.
 func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, error) {
 	verified := interface{}(nil)
 	if s.StraincompassVerified != nil {
@@ -279,7 +307,7 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 	}
 
 	var id int
-	err := db.QueryRow("SELECT id FROM strain WHERE straincompass_slug = $1", s.StraincompassSlug).Scan(&id)
+	err := db.QueryRow("SELECT id FROM strain WHERE straincompass_slug = $1 AND breeder_id = $2", s.StraincompassSlug, breederID).Scan(&id)
 	switch {
 	case err == nil:
 		_, uerr := db.Exec(`

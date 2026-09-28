@@ -11,6 +11,7 @@ import (
 
 	"isley/logger"
 	"isley/model/types"
+	"isley/utils"
 )
 
 // ---------------------------------------------------------------------------
@@ -93,6 +94,10 @@ func CannadbImportHandler(c *gin.Context) {
 
 	var req struct {
 		URI string `json:"uri"`
+		// The breeder the user bought from; when neither is sent, CannaDB's
+		// own breeder record is used.
+		BreederID  *int   `json:"breeder_id"`
+		NewBreeder string `json:"new_breeder"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		apiBadRequest(c, "api_invalid_request_payload")
@@ -101,6 +106,10 @@ func CannadbImportHandler(c *gin.Context) {
 	req.URI = strings.TrimSpace(req.URI)
 	if req.URI == "" || !strings.HasPrefix(req.URI, "at://") {
 		apiBadRequest(c, "api_cannadb_invalid_uri")
+		return
+	}
+	if err := utils.ValidateStringLength("new_breeder", req.NewBreeder, utils.MaxNameLength); err != nil {
+		apiBadRequest(c, err.Error())
 		return
 	}
 
@@ -118,8 +127,13 @@ func CannadbImportHandler(c *gin.Context) {
 		return
 	}
 
-	// Resolve + upsert the breeder first so the strain FK resolves locally.
-	breederID, err := importCannadbBreeder(db, baseURL, val)
+	breederID, err := resolveImportBreeder(db, req.BreederID, req.NewBreeder, func() (int, error) {
+		return importCannadbBreeder(db, baseURL, val)
+	})
+	if errors.Is(err, errImportBreederNotFound) {
+		apiBadRequest(c, "api_breeder_not_found")
+		return
+	}
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to resolve breeder")
 		apiInternalError(c, "api_cannadb_import_failed")
@@ -148,6 +162,8 @@ func CannadbImportHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"id":          strainID,
 		"name":        strain.Name,
+		"breeder_id":  breederID,
+		"breeder":     breederName(db, breederID),
 		"cannadb_url": cannadbWebURL(req.URI),
 		"message":     T(c, "api_cannadb_imported"),
 	})
@@ -270,7 +286,8 @@ func upsertCannadbBreeder(db *sql.DB, name, uri, indexedAt string) (int, error) 
 }
 
 // upsertCannadbStrain inserts a new strain or updates the existing one keyed
-// on cannadb_uri. Returns the strain id.
+// on (cannadb_uri, breeder_id): the same record bought from two breeders is
+// two strains. Returns the strain id.
 func upsertCannadbStrain(db *sql.DB, breederID int, s types.Strain) (int, error) {
 	autoflower := 0
 	if s.Autoflower {
@@ -278,7 +295,7 @@ func upsertCannadbStrain(db *sql.DB, breederID int, s types.Strain) (int, error)
 	}
 
 	var id int
-	err := db.QueryRow("SELECT id FROM strain WHERE cannadb_uri = $1", s.CannadbURI).Scan(&id)
+	err := db.QueryRow("SELECT id FROM strain WHERE cannadb_uri = $1 AND breeder_id = $2", s.CannadbURI, breederID).Scan(&id)
 	switch {
 	case err == nil:
 		_, uerr := db.Exec(`

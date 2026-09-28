@@ -47,6 +47,34 @@ func findOrCreateBreeder(q rowQuerier, name string) (id int, created bool, err e
 	return id, true, nil
 }
 
+var errImportBreederNotFound = errors.New("chosen breeder does not exist")
+
+// resolveImportBreeder picks the breeder for an imported strain: the breeder
+// the user chose (by id or by name), else fallback — the source's own
+// breeder, kept for API callers that don't choose one.
+func resolveImportBreeder(db *sql.DB, breederID *int, newBreeder string, fallback func() (int, error)) (int, error) {
+	if breederID != nil {
+		var id int
+		err := db.QueryRow("SELECT id FROM breeder WHERE id = $1", *breederID).Scan(&id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, errImportBreederNotFound
+		}
+		return id, err
+	}
+	if strings.TrimSpace(newBreeder) != "" {
+		id, _, err := findOrCreateBreeder(db, newBreeder)
+		return id, err
+	}
+	return fallback()
+}
+
+// breederName returns the breeder's name, or "" if it can't be read.
+func breederName(db *sql.DB, id int) string {
+	var name string
+	_ = db.QueryRow("SELECT name FROM breeder WHERE id = $1", id).Scan(&name)
+	return name
+}
+
 // resolveRequestBreeder turns a request's breeder_id / new_breeder pair into
 // a breeder id, writing the API error response itself when it can't.
 func resolveRequestBreeder(c *gin.Context, db *sql.DB, breederID *int, newBreeder string) (int, bool) {

@@ -1,0 +1,194 @@
+package handlers_test
+
+// Import write path for StrainCompass and CannaDB, against fake upstream
+// servers: the user-chosen breeder wins over the listing's, and the same
+// source strain imported for two breeders becomes two strain rows.
+
+import (
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"isley/tests/testutil"
+)
+
+const importBreederPassword = "import-breeder-pw"
+
+const fakeStraincompassList = `{"strains":[{"slug":"blue-dream","name":"Blue Dream","breeder":"Seed Supreme","indicaPercent":40,"sativaPercent":60,"floweringTimeMax":9}],"total":1}`
+
+const fakeCannadbURI = "at://did:plc:test/org.cannadb.strain/runtz"
+
+const fakeCannadbStrain = `{"uri":"` + fakeCannadbURI + `","indexedAt":"2026-01-01T00:00:00Z","value":{"name":"Runtz","breederName":"Cookies","indicaSativa":50,"parentNames":["Zkittlez","Gelato"]}}`
+
+type importServer struct {
+	db     *sql.DB
+	client *testutil.Client
+	token  string
+}
+
+func newImportServer(t *testing.T) *importServer {
+	t.Helper()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/sc/api/strains":
+			_, _ = w.Write([]byte(fakeStraincompassList))
+		case "/cannadb/xrpc/org.cannadb.getStrain":
+			_, _ = w.Write([]byte(fakeCannadbStrain))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(upstream.Close)
+
+	db := testutil.NewTestDB(t)
+	server := testutil.NewTestServer(t, db)
+	server.ConfigStore.SetStraincompassEnabled(1)
+	server.ConfigStore.SetStraincompassBaseURL(upstream.URL + "/sc/api/")
+	server.ConfigStore.SetCannadbEnabled(1)
+	server.ConfigStore.SetCannadbBaseURL(upstream.URL + "/cannadb/xrpc/")
+	testutil.SeedAdmin(t, db, importBreederPassword)
+
+	c, token := server.LoginAndFetchCSRF(t, importBreederPassword, "/strains")
+	return &importServer{db: db, client: c, token: token}
+}
+
+type importResult struct {
+	ID        int    `json:"id"`
+	BreederID int    `json:"breeder_id"`
+	Breeder   string `json:"breeder"`
+}
+
+func (s *importServer) post(t *testing.T, path string, body map[string]any) (int, importResult) {
+	t.Helper()
+	resp := s.client.SessionPostJSON(t, path, s.token, body)
+	defer testutil.DrainAndClose(resp)
+	var got importResult
+	if resp.StatusCode == http.StatusOK {
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	}
+	return resp.StatusCode, got
+}
+
+func (s *importServer) count(t *testing.T, query string, args ...any) int {
+	t.Helper()
+	var n int
+	require.NoError(t, s.db.QueryRow(query, args...).Scan(&n))
+	return n
+}
+
+func TestStraincompassImport_ChosenBreederWins(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	mine := testutil.SeedBreeder(t, s.db, "Sensi Seeds")
+
+	status, got := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": mine,
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, mine, got.BreederID)
+	assert.Equal(t, "Sensi Seeds", got.Breeder)
+	assert.Equal(t, 0, s.count(t, "SELECT COUNT(*) FROM breeder WHERE name = 'Seed Supreme'"),
+		"the listing's breeder must not be created when the user chose one")
+}
+
+func TestStraincompassImport_SameStrainTwoBreedersIsTwoRows(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	first := testutil.SeedBreeder(t, s.db, "Breeder A")
+
+	status, a := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": first,
+	})
+	require.Equal(t, http.StatusOK, status)
+
+	status, b := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "new_breeder": "Breeder B",
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.NotEqual(t, a.ID, b.ID, "a second breeder must get its own strain row")
+	assert.Equal(t, 2, s.count(t, "SELECT COUNT(*) FROM strain WHERE straincompass_slug = 'blue-dream'"))
+
+	// Re-importing for an existing breeder updates that breeder's row in place.
+	status, again := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": first,
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, a.ID, again.ID)
+	assert.Equal(t, 2, s.count(t, "SELECT COUNT(*) FROM strain WHERE straincompass_slug = 'blue-dream'"))
+	assert.Equal(t, first, s.count(t, "SELECT breeder_id FROM strain WHERE id = $1", a.ID),
+		"the first row keeps its breeder")
+}
+
+func TestStraincompassImport_NoChoiceFallsBackToListingBreeder(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+
+	status, got := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream",
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "Seed Supreme", got.Breeder)
+}
+
+func TestStraincompassImport_UnknownBreederIDRejected(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+
+	status, _ := s.post(t, "/strains/straincompass/import", map[string]any{
+		"slug": "blue-dream", "name": "Blue Dream", "breeder_id": 9999,
+	})
+	assert.Equal(t, http.StatusBadRequest, status)
+	assert.Equal(t, 0, s.count(t, "SELECT COUNT(*) FROM strain"))
+}
+
+func TestStraincompassPreview_ReturnsListingBreeder(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+
+	resp := s.client.Get("/strains/straincompass/preview?slug=blue-dream&name=Blue+Dream")
+	defer testutil.DrainAndClose(resp)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var got struct {
+		Name    string `json:"name"`
+		Breeder string `json:"breeder"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	assert.Equal(t, "Blue Dream", got.Name)
+	assert.Equal(t, "Seed Supreme", got.Breeder)
+}
+
+func TestCannadbImport_SameStrainTwoBreedersIsTwoRows(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+	first := testutil.SeedBreeder(t, s.db, "Breeder A")
+
+	status, a := s.post(t, "/strains/cannadb/import", map[string]any{
+		"uri": fakeCannadbURI, "breeder_id": first,
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, first, a.BreederID)
+
+	status, b := s.post(t, "/strains/cannadb/import", map[string]any{
+		"uri": fakeCannadbURI, "new_breeder": "Breeder B",
+	})
+	require.Equal(t, http.StatusOK, status)
+	assert.NotEqual(t, a.ID, b.ID)
+	assert.Equal(t, 2, s.count(t, "SELECT COUNT(*) FROM strain WHERE cannadb_uri = $1", fakeCannadbURI))
+	assert.Equal(t, 0, s.count(t, "SELECT COUNT(*) FROM breeder WHERE name = 'Cookies'"),
+		"CannaDB's breeder must not be created when the user chose one")
+}
+
+func TestCannadbImport_NoChoiceFallsBackToRecordBreeder(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+
+	status, got := s.post(t, "/strains/cannadb/import", map[string]any{"uri": fakeCannadbURI})
+	require.Equal(t, http.StatusOK, status)
+	assert.Equal(t, "Cookies", got.Breeder)
+}
