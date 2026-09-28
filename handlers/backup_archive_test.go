@@ -47,6 +47,12 @@ func seedSampleData(t *testing.T, db *sql.DB) {
 	exec(`INSERT INTO breeder (id, name) VALUES (1, 'Acme Genetics')`)
 	exec(`INSERT INTO strain (id, name, sativa, indica, autoflower, description, seed_count, breeder_id)
 	      VALUES (1, 'OG Test', 50, 50, 0, 'desc', 5, 1)`)
+
+	// strain attributes (migration 022) — user-editable, so they must survive a restore.
+	exec(`INSERT INTO strain_effect (strain_id, name, intensity) VALUES (1, 'Relaxed', 0.8)`)
+	exec(`INSERT INTO strain_flavor (strain_id, name) VALUES (1, 'Citrus')`)
+	exec(`INSERT INTO strain_terpene (strain_id, name, level) VALUES (1, 'Myrcene', 'high')`)
+	exec(`INSERT INTO strain_medical_use (strain_id, name) VALUES (1, 'Insomnia')`)
 }
 
 func rowCount(t *testing.T, db *sql.DB, table string) int {
@@ -230,7 +236,8 @@ func TestApplyBackupToDB_RoundTrip(t *testing.T) {
 	require.NoError(t, handlers.ApplyBackupToDB(context.Background(), dst, payload))
 
 	// Row counts must match for every seeded table.
-	for _, table := range []string{"settings", "zones", "sensors", "sensor_data", "breeder", "strain"} {
+	for _, table := range []string{"settings", "zones", "sensors", "sensor_data", "breeder", "strain",
+		"strain_effect", "strain_flavor", "strain_terpene", "strain_medical_use"} {
 		assert.Equalf(t, rowCount(t, src, table), rowCount(t, dst, table),
 			"row count mismatch for %s after round-trip", table)
 	}

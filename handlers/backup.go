@@ -50,6 +50,12 @@ type BackupPayload struct {
 	RollingAvgs    []map[string]interface{} `json:"rolling_averages"`
 	Strains        []map[string]interface{} `json:"strain"`
 	StrainLineage  []map[string]interface{} `json:"strain_lineage"`
+	// Strain attributes (migration 022). Absent from backups made before
+	// they were included, which restore as "no attributes".
+	StrainEffects     []map[string]interface{} `json:"strain_effect"`
+	StrainFlavors     []map[string]interface{} `json:"strain_flavor"`
+	StrainTerpenes    []map[string]interface{} `json:"strain_terpene"`
+	StrainMedicalUses []map[string]interface{} `json:"strain_medical_use"`
 	PlantStatuses  []map[string]interface{} `json:"plant_status"`
 	Plants         []map[string]interface{} `json:"plant"`
 	PlantStatusLog []map[string]interface{} `json:"plant_status_log"`
@@ -599,6 +605,10 @@ func runRestore(svc *BackupService, payload BackupPayload, zipBody []byte, maxBa
 		"plant_status_log",
 		"plant_images",
 		"streams",
+		"strain_medical_use",
+		"strain_terpene",
+		"strain_flavor",
+		"strain_effect",
 		"strain_lineage",
 		"plant",
 		"sensor_data",
@@ -631,6 +641,10 @@ func runRestore(svc *BackupService, payload BackupPayload, zipBody []byte, maxBa
 		{"rolling_averages", payload.RollingAvgs},
 		{"strain", payload.Strains},
 		{"strain_lineage", payload.StrainLineage},
+		{"strain_effect", payload.StrainEffects},
+		{"strain_flavor", payload.StrainFlavors},
+		{"strain_terpene", payload.StrainTerpenes},
+		{"strain_medical_use", payload.StrainMedicalUses},
 		{"plant", payload.Plants},
 		{"plant_status_log", payload.PlantStatusLog},
 		{"plant_measurements", payload.PlantMeasure},
@@ -814,7 +828,8 @@ func runRestore(svc *BackupService, payload BackupPayload, zipBody []byte, maxBa
 		svc.UpdateRestoreProgress("sequences", "", 0, 0, 0, totalTablesWithData)
 		seqTables := []string{
 			"settings", "zones", "breeder", "sensors", "sensor_data",
-			"strain", "strain_lineage", "plant_status", "plant",
+			"strain", "strain_lineage", "strain_effect", "strain_flavor", "strain_terpene", "strain_medical_use",
+			"plant_status", "plant",
 			"plant_status_log", "metric", "plant_measurements",
 			"activity", "activity_metric", "plant_activity", "plant_images", "streams",
 		}
