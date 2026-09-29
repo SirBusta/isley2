@@ -196,6 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 sativa: 100 - parseInt(editIndicaSativaSlider.value, 10),
                 autoflower: document.getElementById("editAutoflower").value === "true",
                 seed_count: parseInt(document.getElementById("editSeedCount").value, 10),
+                seed_location: document.getElementById("editSeedLocation").value,
                 description: descriptionTextarea.value,
                 short_desc: document.getElementById("editStrainShortDescription").value,
                 cycle_time: parseInt(document.getElementById("editCycleTime").value, 10),

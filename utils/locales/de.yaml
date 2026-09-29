@@ -74,6 +74,8 @@ import_breeder_hint: "Einträge nennen oft den Shop, der die Samen verkauft, sta
 import_breeder_use_source: "„{name}“ verwenden (laut {source})"
 import_breeder_confirm: "Importieren"
 api_breeder_not_found: "Dieser Züchter existiert nicht mehr. Bitte wähle einen anderen."
+seed_location: "Aufbewahrungsort"
+seed_location_placeholder: "z. B. Glas 1 (Kühlschrank)"
 flowering_time: "Blütezeit"
 flowering_time_desc: "Tage von der Umstellung auf 12/12 bis zur Ernte."
 seed_to_harvest: "Samen bis Ernte"

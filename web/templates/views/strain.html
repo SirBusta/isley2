@@ -164,6 +164,12 @@
                                 {{ end }}
                             </span>
                         </li>
+                        {{ with .strain.SeedLocation }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-box-archive me-2"></i>{{ $.lcl.seed_location }}</span>
+                            <span class="strain-info-value">{{ . }}</span>
+                        </li>
+                        {{ end }}
                         {{ with .strain.HeightIndoor }}
                         <li>
                             <span class="strain-info-label"><i class="fa-solid fa-ruler-vertical me-2"></i>{{ $.lcl.height_indoor }}</span>

@@ -143,6 +143,7 @@ document.addEventListener("DOMContentLoaded", () => {
         noMatch: "{{ .lcl.strains_no_match }}",
         noneInStock: "{{ .lcl.strains_none_in_stock }}",
         addedOutOfStock: "{{ .lcl.strains_added_out_of_stock }}",
+        seedLocation: "{{ .lcl.seed_location }}",
     };
 
     let currentView = "in-stock";
@@ -205,7 +206,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 s.name.toLowerCase().includes(query) ||
                 (s.breeder || "").toLowerCase().includes(query) ||
                 (s.short_desc || "").toLowerCase().includes(query) ||
-                (s.lineage || "").toLowerCase().includes(query)
+                (s.lineage || "").toLowerCase().includes(query) ||
+                (s.seed_location || "").toLowerCase().includes(query)
             );
         }
         if (breeder) {
@@ -274,9 +276,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const dominance = s.indica > s.sativa ? "Indica" : s.sativa > s.indica ? "Sativa" : "Hybrid";
 
-            const seedBadge = s.seed_count > 0
+            const seedBadge = (s.seed_count > 0
                 ? `<span class="badge bg-success">${s.seed_count}</span>`
-                : `<span class="badge bg-secondary">0</span>`;
+                : `<span class="badge bg-secondary">0</span>`) +
+                (s.seed_location ? ` <small class="text-muted sc-seed-location" title="${esc(lcl.seedLocation)}"><i class="fa-solid fa-box-archive me-1"></i>${esc(s.seed_location)}</small>` : "");
 
             const lineageHtml = s.lineage
                 ? `<div class="sc-lineage"><i class="fa-solid fa-sitemap me-1"></i>${esc(s.lineage)}</div>`
@@ -328,9 +331,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? `<span class="strain-badge-auto" style="font-size:0.7rem;padding:0.15em 0.5em"><i class="fa-solid fa-bolt me-1"></i>Auto</span>`
                 : `<span class="strain-badge-photo" style="font-size:0.7rem;padding:0.15em 0.5em"><i class="fa-solid fa-sun me-1"></i>Photo</span>`;
 
-            const seedBadge = s.seed_count > 0
+            const seedBadge = (s.seed_count > 0
                 ? `<span class="badge bg-success">${s.seed_count}</span>`
-                : `<span class="badge bg-secondary">0</span>`;
+                : `<span class="badge bg-secondary">0</span>`) +
+                (s.seed_location ? `<div class="small text-muted">${esc(s.seed_location)}</div>` : "");
 
             const extLink = s.url
                 ? ` <a href="${esc(s.url)}" target="_blank" class="text-muted" style="font-size:0.75rem"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>`

@@ -74,6 +74,8 @@ import_breeder_hint: "Los listados suelen nombrar la tienda que vende las semill
 import_breeder_use_source: "Usar \"{name}\" (según {source})"
 import_breeder_confirm: "Importar"
 api_breeder_not_found: "Ese criador ya no existe. Elige otro."
+seed_location: "Ubicación de las semillas"
+seed_location_placeholder: "p. ej. Frasco 1 (nevera)"
 flowering_time: "Tiempo de floración"
 flowering_time_desc: "Días desde el cambio a 12/12 hasta la cosecha."
 seed_to_harvest: "De semilla a cosecha"

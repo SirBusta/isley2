@@ -93,6 +93,8 @@ import_breeder_hint: "Les fiches indiquent souvent la boutique qui vend les grai
 import_breeder_use_source: "Utiliser « {name} » (selon {source})"
 import_breeder_confirm: "Importer"
 api_breeder_not_found: "Cet éleveur n'existe plus. Choisissez-en un autre."
+seed_location: "Emplacement des graines"
+seed_location_placeholder: "ex. Bocal 1 (frigo)"
 flowering_time: "Durée de floraison"
 flowering_time_desc: "Jours entre le passage en 12/12 et la récolte."
 seed_to_harvest: "De la graine à la récolte"

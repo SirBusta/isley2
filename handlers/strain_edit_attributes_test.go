@@ -138,6 +138,25 @@ func TestStrainEdit_SavesAndClearsGrowingInfo(t *testing.T) {
 	assert.False(t, hIn.Valid)
 }
 
+func TestStrainEdit_SeedLocation(t *testing.T) {
+	t.Parallel()
+	e := newStrainEditEnv(t)
+	loc := func() sql.NullString {
+		var s sql.NullString
+		require.NoError(t, e.db.QueryRow("SELECT seed_location FROM strain WHERE id = $1", e.strainID).Scan(&s))
+		return s
+	}
+
+	require.Equal(t, http.StatusOK, e.put(t, map[string]any{"seed_location": "  Jar 1 (fridge) "}))
+	assert.Equal(t, "Jar 1 (fridge)", loc().String)
+
+	require.Equal(t, http.StatusOK, e.put(t, nil))
+	assert.Equal(t, "Jar 1 (fridge)", loc().String, "omitted = unchanged")
+
+	require.Equal(t, http.StatusOK, e.put(t, map[string]any{"seed_location": ""}))
+	assert.False(t, loc().Valid, "blank clears it")
+}
+
 func TestStrainEdit_RejectsBadCannabinoids(t *testing.T) {
 	t.Parallel()
 	e := newStrainEditEnv(t)
