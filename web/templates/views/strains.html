@@ -805,7 +805,8 @@ document.addEventListener("DOMContentLoaded", () => {
             importing: "{{ .lcl.straincompass_importing }}",
             imported: "{{ .lcl.api_straincompass_imported }}",
             importFailed: "{{ .lcl.api_straincompass_import_failed }}",
-            match: "{{ .lcl.straincompass_match }}",
+            unknownBreeder: "{{ .lcl.straincompass_unknown_breeder }}",
+            showing: "{{ .lcl.straincompass_showing_of }}",
         };
 
         function esc(s) {
@@ -814,25 +815,29 @@ document.addEventListener("DOMContentLoaded", () => {
             return d.innerHTML;
         }
 
-        function renderResults(rows) {
+        function renderResults(rows, total) {
             results.innerHTML = "";
             if (!rows || rows.length === 0) {
                 status.textContent = lcl.noResults;
                 return;
             }
-            status.textContent = "";
+            status.textContent = total > rows.length
+                ? lcl.showing.replace("{shown}", rows.length).replace("{total}", total)
+                : "";
             rows.forEach((r) => {
                 const item = document.createElement("div");
                 item.className = "list-group-item";
-                const pct = Math.round((r.sim || 0) * 100);
+                // StrainCompass has one listing per seed company, so the breeder is what tells them apart.
+                const breeder = r.breeder
+                    ? '<span class="text-muted fw-normal">— ' + esc(r.breeder) + '</span>'
+                    : '<span class="text-muted fw-normal fst-italic">— ' + esc(lcl.unknownBreeder) + '</span>';
                 item.innerHTML =
                     '<div class="d-flex justify-content-between align-items-start gap-3">' +
                         '<div class="flex-grow-1">' +
-                            '<div class="fw-semibold">' + esc(r.name) +
+                            '<div class="fw-semibold">' + esc(r.name) + ' ' + breeder +
                                 (r.type ? ' <span class="badge bg-secondary">' + esc(r.type) + '</span>' : '') +
                             '</div>' +
                             (r.thcMax != null ? '<div class="small text-muted">THC ' + esc(r.thcMax) + '%</div>' : '') +
-                            '<div class="small text-secondary mt-1">' + lcl.match + ': ' + pct + '%</div>' +
                         '</div>' +
                         '<button type="button" class="btn btn-sm btn-success flex-shrink-0">' + esc(lcl.importBtn) + '</button>' +
                     '</div>';
@@ -844,27 +849,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
         const breederStep = IsleyImportBreederStep(form.closest(".modal-body").querySelector(".import-breeder-step"));
         const packagingOffer = IsleyPackagingOffer(form.closest(".modal-body").querySelector(".import-packaging-offer"));
-        let askSeq = 0;
 
         async function startImport(r, btn) {
-            const seq = ++askSeq;
             const ask = breederStep.ask(r.name);
-            // Search rows carry no breeder; fetch the listing's to offer it as a one-click choice.
-            fetch("/strains/straincompass/preview?slug=" + encodeURIComponent(r.slug) + "&name=" + encodeURIComponent(r.name))
-                .then((resp) => (resp.ok ? resp.json() : null))
-                .then((d) => { if (d && d.breeder && seq === askSeq) breederStep.setSource(d.breeder, "StrainCompass"); })
-                .catch(() => {});
+            if (r.breeder) breederStep.setSource(r.breeder, "StrainCompass");
             const choice = await ask;
-            if (choice) importStrain(r.slug, r.name, btn, choice);
+            if (choice) importStrain(r, btn, choice);
         }
 
-        function importStrain(slug, name, btn, choice) {
+        function importStrain(r, btn, choice) {
+            const name = r.name;
             btn.disabled = true;
             btn.textContent = lcl.importing;
             fetch("/strains/straincompass/import", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(Object.assign({ slug: slug, name: name }, choice)),
+                // listing_breeder lets the server find this exact listing among many same-named ones.
+                body: JSON.stringify(Object.assign({ slug: r.slug, name: r.name, listing_breeder: r.breeder || "" }, choice)),
             })
                 .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
                 .then(({ ok, data }) => {
@@ -895,11 +896,11 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             results.innerHTML = "";
             status.textContent = lcl.searching;
-            fetch("/strains/straincompass/search?q=" + encodeURIComponent(q) + "&limit=10")
+            fetch("/strains/straincompass/search?q=" + encodeURIComponent(q))
                 .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
                 .then(({ ok, data }) => {
                     if (!ok) throw new Error((data && (data.message || data.error)) || lcl.searchFailed);
-                    renderResults(data.results || []);
+                    renderResults(data.results || [], data.total || 0);
                 })
                 .catch((err) => {
                     status.textContent = err.message || lcl.searchFailed;

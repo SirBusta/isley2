@@ -136,13 +136,77 @@ func TestMapStraincompassStrain(t *testing.T) {
 	})
 }
 
+func TestStraincompassGetStrainBySlug_UsesListingBreeder(t *testing.T) {
+	t.Parallel()
+
+	var queries []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		queries = append(queries, "breeder="+q.Get("breeder")+"&limit="+q.Get("limit"))
+		w.WriteHeader(http.StatusOK)
+		switch q.Get("breeder") {
+		case "Humboldt Seed Co":
+			_, _ = w.Write([]byte(`{"strains":[{"slug":"blue-dream-humboldt","name":"Blue Dream","breeder":"Humboldt Seed Co"}]}`))
+		case "Wrong Breeder":
+			_, _ = w.Write([]byte(`{"strains":[]}`))
+		default:
+			_, _ = w.Write([]byte(`{"strains":[{"slug":"blue-dream-humboldt","name":"Blue Dream","breeder":"Humboldt Seed Co"}]}`))
+		}
+	}))
+	defer srv.Close()
+
+	rec, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "blue-dream-humboldt", "Blue Dream", "Humboldt Seed Co")
+	if err != nil || rec.Slug != "blue-dream-humboldt" {
+		t.Fatalf("got %+v, %v", rec, err)
+	}
+	if len(queries) != 1 || queries[0] != "breeder=Humboldt Seed Co&limit=24" {
+		t.Fatalf("expected one breeder-filtered lookup of up to 24, got %v", queries)
+	}
+
+	// A breeder filter that finds nothing falls back to the name alone.
+	queries = nil
+	rec, err = straincompassGetStrainBySlug(srv.URL+"/api/", "", "blue-dream-humboldt", "Blue Dream", "Wrong Breeder")
+	if err != nil || rec.Slug != "blue-dream-humboldt" {
+		t.Fatalf("fallback: got %+v, %v", rec, err)
+	}
+	if len(queries) != 2 || queries[1] != "breeder=&limit=24" {
+		t.Fatalf("expected filtered then unfiltered lookups, got %v", queries)
+	}
+}
+
+func TestRankStraincompassListings(t *testing.T) {
+	t.Parallel()
+
+	recs := []straincompassStrain{
+		{Slug: "a", Name: "Blue Dream Bx", Breeder: "Seedsman"},
+		{Slug: "b", Name: "Super Blue Dream", Breeder: "Alpha"},
+		{Slug: "c", Name: "Blue Dream", Breeder: " Humboldt Seed Co "},
+		{Slug: "d", Name: "Dream Queen", Breeder: "Zeta"},
+		{Slug: "e", Name: "blue dream", Breeder: "Barneys Farm"},
+	}
+	got := rankStraincompassListings(recs, "Blue Dream")
+	order := ""
+	for _, r := range got {
+		order += r.Slug
+	}
+	// Exact matches (by breeder), then prefix, then contains, then the rest.
+	if order != "ecabd" {
+		t.Fatalf("order = %q, want %q", order, "ecabd")
+	}
+	if got[1].Breeder != "Humboldt Seed Co" {
+		t.Fatalf("breeder not trimmed: %q", got[1].Breeder)
+	}
+}
+
 func TestStraincompassGet_RetriesThenSucceeds(t *testing.T) {
 	t.Parallel()
 
 	// Each 429 carries Retry-After: 0, so the client retries immediately with
 	// no real sleep — keeping the test fast and parallel-safe.
 	var calls int32
+	var gotPath string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
 		n := atomic.AddInt32(&calls, 1)
 		if n < 3 {
 			w.Header().Set("Retry-After", "0")
@@ -151,19 +215,22 @@ func TestStraincompassGet_RetriesThenSucceeds(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"results":[{"slug":"og-kush","name":"OG Kush","type":"HYBRID","sim":0.9}]}`))
+		_, _ = w.Write([]byte(`{"strains":[{"slug":"og-kush","name":"OG Kush","type":"HYBRID","breeder":"Seedsman"}],"total":42}`))
 	}))
 	defer srv.Close()
 
-	rows, err := straincompassSearchStrains(srv.URL+"/api/", "", "og", 5)
+	rows, total, err := straincompassListStrains(srv.URL+"/api/", "", "og", 5)
 	if err != nil {
 		t.Fatalf("expected success after retries, got %v", err)
 	}
 	if atomic.LoadInt32(&calls) != 3 {
 		t.Fatalf("expected 3 attempts, got %d", calls)
 	}
-	if len(rows) != 1 || rows[0].Name != "OG Kush" {
-		t.Fatalf("unexpected rows: %+v", rows)
+	if gotPath != "/api/strains" {
+		t.Fatalf("expected the list endpoint (it carries breeders), got %q", gotPath)
+	}
+	if len(rows) != 1 || rows[0].Name != "OG Kush" || rows[0].Breeder != "Seedsman" || total != 42 {
+		t.Fatalf("unexpected rows/total: %+v %d", rows, total)
 	}
 }
 
@@ -178,7 +245,7 @@ func TestStraincompassGet_NonRetryableError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := straincompassSearchStrains(srv.URL+"/api/", "", "og", 5)
+	_, _, err := straincompassListStrains(srv.URL+"/api/", "", "og", 5)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -205,7 +272,7 @@ func TestStraincompassGet_InvalidKeyNotRetried(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	_, err := straincompassSearchStrains(srv.URL+"/api/", "bad-key", "og", 5)
+	_, _, err := straincompassListStrains(srv.URL+"/api/", "bad-key", "og", 5)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -225,18 +292,18 @@ func TestStraincompassGet_SendsBearerTokenOnlyWhenConfigured(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"results":[]}`))
+		_, _ = w.Write([]byte(`{"strains":[]}`))
 	}))
 	defer srv.Close()
 
-	if _, err := straincompassSearchStrains(srv.URL+"/api/", "my-key", "og", 5); err != nil {
+	if _, _, err := straincompassListStrains(srv.URL+"/api/", "my-key", "og", 5); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotAuth != "Bearer my-key" {
 		t.Fatalf("Authorization header = %q, want %q", gotAuth, "Bearer my-key")
 	}
 
-	if _, err := straincompassSearchStrains(srv.URL+"/api/", "", "og", 5); err != nil {
+	if _, _, err := straincompassListStrains(srv.URL+"/api/", "", "og", 5); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotAuth != "" {
@@ -254,7 +321,7 @@ func TestStraincompassGetStrainBySlug_ExactMatchRequired(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		_, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "Permanent Marker")
+		_, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "Permanent Marker", "")
 		if err != errStraincompassNotFound {
 			t.Fatalf("expected errStraincompassNotFound, got %v", err)
 		}
@@ -270,7 +337,7 @@ func TestStraincompassGetStrainBySlug_ExactMatchRequired(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		rec, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "Permanent Marker")
+		rec, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "Permanent Marker", "")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -294,7 +361,7 @@ func TestStraincompassGetStrainBySlug_QueryUsesNameNotSlug(t *testing.T) {
 	// The list endpoint matches on name, not slug — a hyphenated slug like
 	// "permanent-marker" does not match the name "Permanent Marker" on the
 	// live API, so the query text sent must be the name when one is given.
-	if _, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "Permanent Marker"); err != nil {
+	if _, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "Permanent Marker", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotQuery != "Permanent Marker" {
@@ -302,7 +369,7 @@ func TestStraincompassGetStrainBySlug_QueryUsesNameNotSlug(t *testing.T) {
 	}
 
 	// With no name given, falls back to the slug as a best-effort query.
-	if _, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", ""); err != nil {
+	if _, err := straincompassGetStrainBySlug(srv.URL+"/api/", "", "permanent-marker", "", ""); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if gotQuery != "permanent-marker" {

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -35,8 +36,59 @@ func straincompassEnabled(c *gin.Context) bool {
 	return ConfigStoreFromContext(c).StraincompassEnabled() == 1
 }
 
-// StraincompassSearchHandler proxies the autocomplete search endpoint.
+// straincompassListing is one search result row sent to the import dialog.
+type straincompassListing struct {
+	Slug     string   `json:"slug"`
+	Name     string   `json:"name"`
+	Type     string   `json:"type"`
+	Breeder  string   `json:"breeder"`
+	ThcMax   *float64 `json:"thcMax"`
+	Verified bool     `json:"verified"`
+}
+
+// rankStraincompassListings orders listings for the dialog: exact name match
+// first, then names starting with the query, then names containing it, then
+// the rest; ties by name, then breeder.
+func rankStraincompassListings(recs []straincompassStrain, query string) []straincompassListing {
+	q := strings.ToLower(strings.TrimSpace(query))
+	rank := func(name string) int {
+		n := strings.ToLower(strings.TrimSpace(name))
+		switch {
+		case n == q:
+			return 0
+		case strings.HasPrefix(n, q):
+			return 1
+		case strings.Contains(n, q):
+			return 2
+		default:
+			return 3
+		}
+	}
+	rows := make([]straincompassListing, 0, len(recs))
+	for _, r := range recs {
+		rows = append(rows, straincompassListing{
+			Slug: r.Slug, Name: r.Name, Type: r.Type,
+			Breeder: strings.TrimSpace(r.Breeder), ThcMax: r.ThcMax, Verified: r.Verified,
+		})
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		ri, rj := rank(rows[i].Name), rank(rows[j].Name)
+		if ri != rj {
+			return ri < rj
+		}
+		ni, nj := strings.ToLower(rows[i].Name), strings.ToLower(rows[j].Name)
+		if ni != nj {
+			return ni < nj
+		}
+		return strings.ToLower(rows[i].Breeder) < strings.ToLower(rows[j].Breeder)
+	})
+	return rows
+}
+
+// StraincompassSearchHandler searches StrainCompass listings for the import
+// dialog, with each listing's breeder.
 // GET /strains/straincompass/search?q=<name>&limit=<n>
+// Response: {"results": [...], "total": <matches on StrainCompass>}
 func StraincompassSearchHandler(c *gin.Context) {
 	fieldLogger := logger.Log.WithField("func", "StraincompassSearchHandler")
 
@@ -51,7 +103,7 @@ func StraincompassSearchHandler(c *gin.Context) {
 		return
 	}
 
-	limit := 10
+	limit := straincompassKeylessResultCap
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= straincompassKeylessResultCap {
 			limit = n
@@ -59,14 +111,15 @@ func StraincompassSearchHandler(c *gin.Context) {
 	}
 
 	store := ConfigStoreFromContext(c)
-	results, err := straincompassSearchStrains(store.StraincompassBaseURL(), store.StraincompassAPIKey(), query, limit)
+	recs, total, err := straincompassListStrains(store.StraincompassBaseURL(), store.StraincompassAPIKey(), query, limit)
 	if err != nil {
 		respondStraincompassError(c, err, "api_straincompass_search_failed")
 		return
 	}
 
+	results := rankStraincompassListings(recs, query)
 	fieldLogger.WithField("count", len(results)).Debug("StrainCompass search complete")
-	c.JSON(http.StatusOK, gin.H{"results": results})
+	c.JSON(http.StatusOK, gin.H{"results": results, "total": total})
 }
 
 // StraincompassImportHandler fetches a full strain record and upserts it
@@ -88,6 +141,9 @@ func StraincompassImportHandler(c *gin.Context) {
 		// (e.g. "permanent-marker") won't resolve. The search results the
 		// frontend renders already carry the name, so it's sent along.
 		Name string `json:"name"`
+		// ListingBreeder is StrainCompass's breeder for the chosen listing,
+		// used only to find that listing among many with the same name.
+		ListingBreeder string `json:"listing_breeder"`
 		// The breeder the user bought from. StrainCompass's own breeder is
 		// per listing and often a reseller, so the user's choice wins; when
 		// neither is sent, the listing's breeder is used.
@@ -113,7 +169,7 @@ func StraincompassImportHandler(c *gin.Context) {
 	baseURL := store.StraincompassBaseURL()
 	apiKey := store.StraincompassAPIKey()
 
-	rec, err := straincompassGetStrainBySlug(baseURL, apiKey, req.Slug, req.Name)
+	rec, err := straincompassGetStrainBySlug(baseURL, apiKey, req.Slug, req.Name, req.ListingBreeder)
 	if err != nil {
 		respondStraincompassError(c, err, "api_straincompass_import_failed")
 		return
@@ -180,29 +236,6 @@ func StraincompassImportHandler(c *gin.Context) {
 		// URL of a CannaDB seed-pack image held for the user to accept; "" when none.
 		"packaging_image_offer": packagingOffer,
 	})
-}
-
-// StraincompassPreviewHandler returns the listing's own breeder so the
-// import dialog can offer it as a one-click choice. The search endpoint the
-// dialog uses doesn't carry breeders.
-// GET /strains/straincompass/preview?slug=<slug>&name=<name>
-func StraincompassPreviewHandler(c *gin.Context) {
-	if !straincompassEnabled(c) {
-		apiBadRequest(c, "api_straincompass_disabled")
-		return
-	}
-	slug := strings.TrimSpace(c.Query("slug"))
-	if slug == "" {
-		apiBadRequest(c, "api_straincompass_invalid_slug")
-		return
-	}
-	store := ConfigStoreFromContext(c)
-	rec, err := straincompassGetStrainBySlug(store.StraincompassBaseURL(), store.StraincompassAPIKey(), slug, strings.TrimSpace(c.Query("name")))
-	if err != nil {
-		respondStraincompassError(c, err, "api_straincompass_search_failed")
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"name": rec.Name, "breeder": strings.TrimSpace(rec.Breeder)})
 }
 
 // ---------------------------------------------------------------------------

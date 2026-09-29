@@ -176,20 +176,26 @@ func TestStraincompassImport_UnknownBreederIDRejected(t *testing.T) {
 	assert.Equal(t, 0, s.count(t, "SELECT COUNT(*) FROM strain"))
 }
 
-func TestStraincompassPreview_ReturnsListingBreeder(t *testing.T) {
+func TestStraincompassSearch_ReturnsBreederPerListing(t *testing.T) {
 	t.Parallel()
 	s := newImportServer(t)
 
-	resp := s.client.Get("/strains/straincompass/preview?slug=blue-dream&name=Blue+Dream")
+	resp := s.client.Get("/strains/straincompass/search?q=Blue+Dream")
 	defer testutil.DrainAndClose(resp)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var got struct {
-		Name    string `json:"name"`
-		Breeder string `json:"breeder"`
+		Results []struct {
+			Slug    string `json:"slug"`
+			Name    string `json:"name"`
+			Breeder string `json:"breeder"`
+		} `json:"results"`
+		Total int `json:"total"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
-	assert.Equal(t, "Blue Dream", got.Name)
-	assert.Equal(t, "Seed Supreme", got.Breeder)
+	require.Len(t, got.Results, 1)
+	assert.Equal(t, "blue-dream", got.Results[0].Slug)
+	assert.Equal(t, "Seed Supreme", got.Results[0].Breeder)
+	assert.Equal(t, 1, got.Total)
 }
 
 func TestStraincompassImport_RecordsLineageFromNote(t *testing.T) {

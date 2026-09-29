@@ -336,7 +336,6 @@ func AddProtectedApiRoutes(r *gin.RouterGroup) {
 	// same reason as CannaDB above: anonymous users must not be able to
 	// drive outbound calls against a shared per-key/per-IP rate budget.
 	r.GET("/strains/straincompass/search", handlers.StraincompassSearchHandler)
-	r.GET("/strains/straincompass/preview", handlers.StraincompassPreviewHandler)
 	r.POST("/strains/straincompass/import", handlers.StraincompassImportHandler)
 
 	// Seed-pack (packaging) image: upload, remove, or accept/discard a held CannaDB offer.

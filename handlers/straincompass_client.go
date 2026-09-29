@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math/rand"
@@ -82,20 +83,6 @@ func (e *straincompassError) Error() string {
 	return fmt.Sprintf("straincompass: http %d", e.HTTPStatus)
 }
 
-// straincompassSearchRow is a summary row from the autocomplete search
-// endpoint. Thinner than the full strain object — no description/breeder.
-type straincompassSearchRow struct {
-	Slug     string   `json:"slug"`
-	Name     string   `json:"name"`
-	Type     string   `json:"type"`
-	ThcMax   *float64 `json:"thcMax"`
-	ImageUrl string   `json:"imageUrl"`
-	Sim      float64  `json:"sim"`
-}
-
-type straincompassSearchResponse struct {
-	Results []straincompassSearchRow `json:"results"`
-}
 
 type straincompassEffect struct {
 	Name      string   `json:"name"`
@@ -301,10 +288,13 @@ func straincompassRetryWait(attempt int, header string) time.Duration {
 // High-level calls
 // ---------------------------------------------------------------------------
 
-// straincompassSearchStrains runs the autocomplete search endpoint. The API
-// requires a 2-character minimum query; callers must enforce that before
-// calling.
-func straincompassSearchStrains(baseURL, apiKey, query string, limit int) ([]straincompassSearchRow, error) {
+// straincompassListStrains searches the list endpoint, which returns full
+// listings including each one's breeder (the lighter strains/search endpoint
+// doesn't, and StrainCompass has one listing per seed company, so the
+// breeder is what tells them apart). Results aren't relevance-ordered. The
+// API requires a 2-character minimum query; callers must enforce that.
+// Returns the listings and the total number of matches.
+func straincompassListStrains(baseURL, apiKey, query string, limit int) ([]straincompassStrain, int, error) {
 	if limit <= 0 || limit > straincompassKeylessResultCap {
 		limit = straincompassKeylessResultCap
 	}
@@ -312,11 +302,11 @@ func straincompassSearchStrains(baseURL, apiKey, query string, limit int) ([]str
 	params.Set("q", query)
 	params.Set("limit", strconv.Itoa(limit))
 
-	var out straincompassSearchResponse
-	if err := straincompassGet(baseURL, apiKey, "strains/search", params, &out); err != nil {
-		return nil, err
+	var out straincompassListResponse
+	if err := straincompassGet(baseURL, apiKey, "strains", params, &out); err != nil {
+		return nil, 0, err
 	}
-	return out.Results, nil
+	return out.Strains, out.Total, nil
 }
 
 // errStraincompassNotFound is returned by straincompassGetStrainBySlug when
@@ -335,23 +325,42 @@ var errStraincompassNotFound = fmt.Errorf("straincompass: no exact slug match")
 // text must be the name, not the slug. name may be empty (e.g. from a client
 // that only has the slug), in which case the slug is used as a best-effort
 // query, which works for single-word strain names but not multi-word ones.
-func straincompassGetStrainBySlug(baseURL, apiKey, slug, name string) (*straincompassStrain, error) {
+//
+// Popular names have dozens of listings (one per seed company), so breeder —
+// the chosen listing's breeder, when known — narrows the query with the
+// list endpoint's breeder filter; if that finds nothing the lookup is
+// retried without it.
+func straincompassGetStrainBySlug(baseURL, apiKey, slug, name, breeder string) (*straincompassStrain, error) {
 	queryText := strings.TrimSpace(name)
 	if queryText == "" {
 		queryText = slug
 	}
-	params := url.Values{}
-	params.Set("q", queryText)
-	params.Set("limit", "5")
+	breeder = strings.TrimSpace(breeder)
 
-	var out straincompassListResponse
-	if err := straincompassGet(baseURL, apiKey, "strains", params, &out); err != nil {
-		return nil, err
+	find := func(withBreeder bool) (*straincompassStrain, error) {
+		params := url.Values{}
+		params.Set("q", queryText)
+		params.Set("limit", strconv.Itoa(straincompassKeylessResultCap))
+		if withBreeder {
+			params.Set("breeder", breeder)
+		}
+		var out straincompassListResponse
+		if err := straincompassGet(baseURL, apiKey, "strains", params, &out); err != nil {
+			return nil, err
+		}
+		for i := range out.Strains {
+			if out.Strains[i].Slug == slug {
+				return &out.Strains[i], nil
+			}
+		}
+		return nil, errStraincompassNotFound
 	}
-	for i := range out.Strains {
-		if out.Strains[i].Slug == slug {
-			return &out.Strains[i], nil
+
+	if breeder != "" {
+		rec, err := find(true)
+		if !errors.Is(err, errStraincompassNotFound) {
+			return rec, err
 		}
 	}
-	return nil, errStraincompassNotFound
+	return find(false)
 }
