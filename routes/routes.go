@@ -260,6 +260,7 @@ func AddBasicRoutes(r *gin.RouterGroup, version string) {
 			"strain":           strain,
 			"cannadbURL":       handlers.CannadbWebURL(strain.CannadbURI),
 			"straincompassURL": handlers.StraincompassWebURL(strain.StraincompassSlug),
+			"lineageSourceURL": handlers.CannadbWebURL(strain.LineageSourceURI),
 			"breeders":         store.Breeders(),
 			"loggedIn":         sessions.Default(c).Get("logged_in"),
 			"lcl":              translations,

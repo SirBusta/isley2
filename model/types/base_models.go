@@ -271,6 +271,11 @@ type Strain struct {
 	StraincompassSources     string   `json:"straincompass_sources,omitempty"`
 	StraincompassLineageNote string   `json:"straincompass_lineage_note,omitempty"`
 
+	// Where the parent strains came from ("straincompass", "cannadb"; empty
+	// when the user entered them) and the source record's URI.
+	LineageSource    string `json:"lineage_source,omitempty"`
+	LineageSourceURI string `json:"lineage_source_uri,omitempty"`
+
 	// Expected height/yield as free text with units, e.g. "90-150cm".
 	HeightIndoor  string `json:"height_indoor,omitempty"`
 	HeightOutdoor string `json:"height_outdoor,omitempty"`

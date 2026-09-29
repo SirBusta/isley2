@@ -154,6 +154,14 @@ func StraincompassImportHandler(c *gin.Context) {
 		fieldLogger.WithError(err).Warn("Failed to record lineage from StrainCompass note")
 	}
 
+	// Fill what StrainCompass lacked from CannaDB, when that integration is
+	// on. Best effort: a CannaDB outage must not fail the import.
+	if store.CannadbEnabled() == 1 {
+		if _, _, err := enrichFromCannadb(db, store.CannadbBaseURL(), strainID, strain.Name, breederName(db, breederID)); err != nil {
+			fieldLogger.WithError(err).Warn("CannaDB gap-fill failed")
+		}
+	}
+
 	// Refresh in-memory caches so the UI reflects the import immediately.
 	store.SetBreeders(GetBreeders(db))
 	store.SetStrains(GetStrains(db))

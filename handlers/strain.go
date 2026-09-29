@@ -300,7 +300,7 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		       coalesce(s.straincompass_slug, ''), coalesce(s.straincompass_updated_at, ''), s.thc_min, s.thc_max, s.cbd_min, s.cbd_max, s.cbn_max, s.cbg_max,
 		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, ''),
 		       coalesce(s.height_indoor, ''), coalesce(s.height_outdoor, ''), coalesce(s.yield_indoor, ''), coalesce(s.yield_outdoor, ''),
-		       coalesce(s.seed_location, '')
+		       coalesce(s.seed_location, ''), coalesce(s.lineage_source, ''), coalesce(s.lineage_source_uri, '')
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		WHERE s.id = $1`, id).Scan(
@@ -308,7 +308,7 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		&strain.StraincompassSlug, &strain.StraincompassUpdatedAt, &strain.ThcMin, &strain.ThcMax, &strain.CbdMin, &strain.CbdMax, &strain.CbnMax, &strain.CbgMax,
 		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote,
 		&strain.HeightIndoor, &strain.HeightOutdoor, &strain.YieldIndoor, &strain.YieldOutdoor,
-		&strain.SeedLocation)
+		&strain.SeedLocation, &strain.LineageSource, &strain.LineageSourceURI)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			fieldLogger.Error("Strain not found")

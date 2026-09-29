@@ -7,7 +7,9 @@ import (
 	"isley/model/types"
 	"isley/utils"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 )
@@ -112,6 +114,7 @@ func AddLineageHandler(c *gin.Context) {
 		apiInternalError(c, "api_failed_to_add_lineage")
 		return
 	}
+	clearLineageSource(db, strainID)
 
 	c.JSON(http.StatusCreated, gin.H{"id": id})
 }
@@ -128,6 +131,7 @@ func DeleteLineageHandler(c *gin.Context) {
 
 	db := DBFromContext(c)
 
+	clearLineageSourceForEntry(db, lineageID)
 	result, err := db.Exec(`DELETE FROM strain_lineage WHERE id = $1`, lineageID)
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to delete lineage entry")
@@ -181,8 +185,18 @@ func UpdateLineageHandler(c *gin.Context) {
 		apiInternalError(c, "api_failed_to_update_lineage")
 		return
 	}
+	clearLineageSourceForEntry(db, lineageID)
 
 	apiOK(c, "api_lineage_updated")
+}
+
+// clearLineageSourceForEntry is clearLineageSource for the strain owning a
+// lineage row.
+func clearLineageSourceForEntry(db *sql.DB, lineageID int) {
+	var strainID int
+	if err := db.QueryRow("SELECT strain_id FROM strain_lineage WHERE id = $1", lineageID).Scan(&strainID); err == nil {
+		clearLineageSource(db, strainID)
+	}
 }
 
 // SetLineageHandler replaces all lineage entries for a strain (bulk operation)
@@ -208,6 +222,16 @@ func SetLineageHandler(c *gin.Context) {
 	}
 
 	db := DBFromContext(c)
+
+	// The Edit Strain page re-saves lineage on every save; only a real change
+	// makes it the user's own (dropping any "from CannaDB/StrainCompass" note).
+	var incoming []lineageEntryKey
+	for _, p := range req.Parents {
+		if utils.ValidateRequiredString("parent_name", p.ParentName, utils.MaxNameLength) == nil {
+			incoming = append(incoming, lineageEntryKey{p.ParentName, p.ParentStrainID})
+		}
+	}
+	changed := lineageSignature(incoming) != lineageSignature(currentLineageKeys(db, strainID))
 
 	tx, err := db.Begin()
 	if err != nil {
@@ -247,8 +271,38 @@ func SetLineageHandler(c *gin.Context) {
 		apiInternalError(c, "api_internal_error")
 		return
 	}
+	if changed {
+		clearLineageSource(db, strainID)
+	}
 
 	apiOK(c, "api_lineage_updated")
+}
+
+type lineageEntryKey struct {
+	name     string
+	parentID *int
+}
+
+func currentLineageKeys(db *sql.DB, strainID int) []lineageEntryKey {
+	var keys []lineageEntryKey
+	for _, l := range GetLineage(db, strainID) {
+		keys = append(keys, lineageEntryKey{l.ParentName, l.ParentStrainID})
+	}
+	return keys
+}
+
+// lineageSignature is an order-independent fingerprint of a parent list.
+func lineageSignature(keys []lineageEntryKey) string {
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		id := ""
+		if k.parentID != nil {
+			id = strconv.Itoa(*k.parentID)
+		}
+		parts = append(parts, strings.ToLower(strings.TrimSpace(k.name))+"|"+id)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ";")
 }
 
 // GetDescendants returns strains that have the given strain as a parent,

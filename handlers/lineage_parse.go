@@ -5,6 +5,7 @@ import (
 	"strings"
 	"unicode"
 
+	"isley/logger"
 	"isley/utils"
 )
 
@@ -89,16 +90,26 @@ func stripOuterParens(s string) string {
 	return strings.TrimSpace(string(runes[1 : len(runes)-1]))
 }
 
-// seedLineageFromNote records the parents parsed from a source lineage note,
-// but only when the strain has no lineage yet, so a user's own lineage is
-// never overwritten. A parent is linked when exactly one other local strain
-// has that name. Returns the number of parents recorded.
+const (
+	lineageSourceStraincompass = "straincompass"
+	lineageSourceCannadb       = "cannadb"
+)
+
+// seedLineageFromNote records the parents parsed from a StrainCompass
+// lineage note (see seedLineage). Returns the number of parents recorded.
 func seedLineageFromNote(db *sql.DB, strainID int, note string) (int, error) {
 	parents, ok := parseLineageNote(note)
 	if !ok {
 		return 0, nil
 	}
+	return seedLineage(db, strainID, parents, lineageSourceStraincompass, "")
+}
 
+// seedLineage records parents for a strain, but only when it has no lineage
+// yet, so a user's own lineage is never overwritten. A parent is linked when
+// exactly one other local strain has that name. source/sourceURI record
+// where the parents came from. Returns the number of parents recorded.
+func seedLineage(db *sql.DB, strainID int, parents []string, source, sourceURI string) (int, error) {
 	var existing int
 	if err := db.QueryRow("SELECT COUNT(*) FROM strain_lineage WHERE strain_id = $1", strainID).Scan(&existing); err != nil {
 		return 0, err
@@ -114,10 +125,14 @@ func seedLineageFromNote(db *sql.DB, strainID int, note string) (int, error) {
 	defer func() { _ = tx.Rollback() }()
 
 	added := 0
+	seen := map[string]bool{}
 	for _, name := range parents {
-		if len(name) > utils.MaxNameLength {
+		name = strings.TrimSpace(name)
+		key := strings.ToLower(name)
+		if name == "" || seen[key] || len(name) > utils.MaxNameLength {
 			continue
 		}
+		seen[key] = true
 		linkID, err := uniqueLocalStrainID(tx, name, strainID)
 		if err != nil {
 			return 0, err
@@ -129,7 +144,22 @@ func seedLineageFromNote(db *sql.DB, strainID int, note string) (int, error) {
 		}
 		added++
 	}
+	if added == 0 {
+		return 0, nil
+	}
+	if _, err := tx.Exec("UPDATE strain SET lineage_source = $1, lineage_source_uri = $2 WHERE id = $3",
+		source, nullableStr(sourceURI), strainID); err != nil {
+		return 0, err
+	}
 	return added, tx.Commit()
+}
+
+// clearLineageSource marks a strain's lineage as the user's own after they
+// edit it, so it's no longer attributed to an import.
+func clearLineageSource(db *sql.DB, strainID any) {
+	if _, err := db.Exec("UPDATE strain SET lineage_source = NULL, lineage_source_uri = NULL WHERE id = $1", strainID); err != nil {
+		logger.Log.WithField("func", "clearLineageSource").WithError(err).Warn("Failed to clear lineage source")
+	}
 }
 
 // uniqueLocalStrainID returns the id of the only strain (other than

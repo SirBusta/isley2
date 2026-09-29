@@ -218,6 +218,12 @@
                         {{ .lcl.straincompass_lineage_label }}: {{ .strain.StraincompassLineageNote }}
                     </p>
                     {{ end }}
+                    {{ if eq .strain.LineageSource "cannadb" }}
+                    <p class="small text-muted mt-2 mb-0">
+                        <i class="fa-solid fa-cloud-arrow-down me-1"></i>{{ .lcl.lineage_from_cannadb }}
+                        {{ if .lineageSourceURL }}<a href="{{ .lineageSourceURL }}" target="_blank" rel="noopener noreferrer">{{ .lcl.lineage_view_source }}</a>{{ end }}
+                    </p>
+                    {{ end }}
                 </div>
             </div>
 

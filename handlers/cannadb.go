@@ -149,7 +149,7 @@ func CannadbImportHandler(c *gin.Context) {
 		return
 	}
 
-	if err := replaceCannadbLineage(db, strainID, val.ParentNames); err != nil {
+	if err := replaceCannadbLineage(db, strainID, val.ParentNames, rec.URI); err != nil {
 		// Lineage is best-effort; log but don't fail the import.
 		fieldLogger.WithError(err).Warn("Failed to import lineage")
 	}
@@ -319,31 +319,29 @@ func upsertCannadbStrain(db *sql.DB, breederID int, s types.Strain) (int, error)
 	}
 }
 
-// replaceCannadbLineage rewrites the strain's lineage from the CannaDB
-// parentNames (display fallbacks). Parent strains are not recursively imported
-// in v1, so parent_strain_id is left NULL.
-func replaceCannadbLineage(db *sql.DB, strainID int, parentNames []string) error {
-	tx, err := db.Begin()
-	if err != nil {
+// replaceCannadbLineage records the strain's parents from CannaDB's
+// parentNames. Lineage the user entered, or that came from another source,
+// is left alone; lineage an earlier CannaDB import wrote is refreshed.
+// Parents are linked to a local strain when exactly one has that name.
+func replaceCannadbLineage(db *sql.DB, strainID int, parentNames []string, recordURI string) error {
+	var source sql.NullString
+	var existing int
+	if err := db.QueryRow("SELECT lineage_source FROM strain WHERE id = $1", strainID).Scan(&source); err != nil {
 		return err
 	}
-	if _, err := tx.Exec("DELETE FROM strain_lineage WHERE strain_id = $1", strainID); err != nil {
-		tx.Rollback()
+	if err := db.QueryRow("SELECT COUNT(*) FROM strain_lineage WHERE strain_id = $1", strainID).Scan(&existing); err != nil {
 		return err
 	}
-	for _, name := range parentNames {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
+	if existing > 0 {
+		if source.String != lineageSourceCannadb {
+			return nil
 		}
-		if _, err := tx.Exec(
-			"INSERT INTO strain_lineage (strain_id, parent_name, parent_strain_id) VALUES ($1, $2, NULL)",
-			strainID, name); err != nil {
-			tx.Rollback()
+		if _, err := db.Exec("DELETE FROM strain_lineage WHERE strain_id = $1", strainID); err != nil {
 			return err
 		}
 	}
-	return tx.Commit()
+	_, err := seedLineage(db, strainID, repairCannadbParentNames(parentNames), lineageSourceCannadb, recordURI)
+	return err
 }
 
 // nullableStr returns nil for empty strings so NULL is stored instead of "",
