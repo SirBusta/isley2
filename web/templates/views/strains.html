@@ -511,6 +511,49 @@ document.addEventListener("DOMContentLoaded", () => {
 
 {{ if .loggedIn }}
 <script nonce="{{ .cspNonce }}">
+    // "Keep CannaDB's seed-pack image?" prompt inside an import modal:
+    // import it, upload your own instead, or leave the strain without one.
+    window.IsleyPackagingOffer = function (panel) {
+        const q = (role) => panel.querySelector(`[data-role="${role}"]`);
+        let strainID = null;
+
+        function hide() {
+            panel.classList.add("d-none");
+            strainID = null;
+        }
+
+        async function send(path, opts) {
+            if (!strainID) return;
+            const resp = await fetch(`/strains/${strainID}/packaging-image${path}`, Object.assign({ method: "POST" }, opts));
+            const data = await resp.json().catch(() => ({}));
+            if (window.uiMessages) uiMessages.showToast(data.message || data.error || "", resp.ok ? "success" : "danger");
+            if (resp.ok) hide();
+        }
+
+        q("accept").addEventListener("click", () => send("/accept"));
+        q("skip").addEventListener("click", () => send("/discard"));
+        q("upload").addEventListener("click", () => q("file").click());
+        q("file").addEventListener("change", () => {
+            const file = q("file").files[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append("image", file);
+            send("", { body: form });
+            q("file").value = "";
+        });
+
+        return {
+            show(id, name, url) {
+                strainID = id;
+                q("title").textContent = panel.dataset.title.replace("{name}", name || "");
+                q("preview").src = url + "?t=" + Date.now();
+                q("preview").alt = name || "";
+                panel.classList.remove("d-none");
+                panel.scrollIntoView({ block: "nearest" });
+            },
+        };
+    };
+
     // Drives one "which breeder?" step inside an import modal. ask() resolves
     // to {breeder_id} / {new_breeder}, or null when cancelled.
     window.IsleyImportBreederStep = function (form) {
@@ -598,6 +641,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </button>
                 </form>
                 {{ template "strain-import-breeder-step" . }}
+                {{ template "strain-import-packaging-offer" . }}
                 <div id="cannadbSearchStatus" class="text-muted small mb-2"></div>
                 <div id="cannadbResults" class="list-group"></div>
             </div>
@@ -659,6 +703,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const breederStep = IsleyImportBreederStep(form.closest(".modal-body").querySelector(".import-breeder-step"));
+        const packagingOffer = IsleyPackagingOffer(form.closest(".modal-body").querySelector(".import-packaging-offer"));
 
         async function startImport(r, btn) {
             const ask = breederStep.ask(r.name);
@@ -680,6 +725,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!ok) throw new Error((data && (data.message || data.error)) || lcl.importFailed);
                     if (window.uiMessages) uiMessages.showToast((data && data.message) || lcl.imported, "success");
                     breederStep.addBreeder(data.breeder_id, data.breeder);
+                    if (data.packaging_image_offer) packagingOffer.show(data.id, data.name, data.packaging_image_offer);
                     // Left enabled: the same strain can be imported again for another breeder.
                     btn.disabled = false;
                     btn.classList.remove("btn-success");
@@ -734,6 +780,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </button>
                 </form>
                 {{ template "strain-import-breeder-step" . }}
+                {{ template "strain-import-packaging-offer" . }}
                 <div id="straincompassSearchStatus" class="text-muted small mb-2"></div>
                 <div id="straincompassResults" class="list-group"></div>
             </div>
@@ -796,6 +843,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const breederStep = IsleyImportBreederStep(form.closest(".modal-body").querySelector(".import-breeder-step"));
+        const packagingOffer = IsleyPackagingOffer(form.closest(".modal-body").querySelector(".import-packaging-offer"));
         let askSeq = 0;
 
         async function startImport(r, btn) {
@@ -823,6 +871,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (!ok) throw new Error((data && (data.message || data.error)) || lcl.importFailed);
                     if (window.uiMessages) uiMessages.showToast((data && data.message) || lcl.imported, "success");
                     breederStep.addBreeder(data.breeder_id, data.breeder);
+                    if (data.packaging_image_offer) packagingOffer.show(data.id, data.name, data.packaging_image_offer);
                     // Left enabled: the same strain can be imported again for another breeder.
                     btn.disabled = false;
                     btn.classList.remove("btn-success");
@@ -862,6 +911,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
 {{ template "common/footer.html" .}}
 
+{{ end }}
+
+{{ define "strain-import-packaging-offer" }}
+<!-- Shown after an import when CannaDB has a seed-pack image; the image is already held locally by Isley. -->
+<div class="import-packaging-offer border border-info rounded p-3 mb-3 d-none" role="dialog"
+     data-title="{{ .lcl.packaging_offer_title }}">
+    <div class="fw-semibold mb-2" data-role="title"></div>
+    <img data-role="preview" alt="" class="img-thumbnail mb-2 d-block" style="max-width:180px">
+    <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm btn-success" data-role="accept">{{ .lcl.packaging_offer_import }}</button>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-role="upload">{{ .lcl.packaging_offer_upload }}</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-role="skip">{{ .lcl.packaging_offer_skip }}</button>
+        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="d-none" data-role="file">
+    </div>
+</div>
 {{ end }}
 
 {{ define "strain-import-breeder-step" }}

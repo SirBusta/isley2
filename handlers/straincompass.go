@@ -156,10 +156,13 @@ func StraincompassImportHandler(c *gin.Context) {
 
 	// Fill what StrainCompass lacked from CannaDB, when that integration is
 	// on. Best effort: a CannaDB outage must not fail the import.
+	packagingOffer := ""
 	if store.CannadbEnabled() == 1 {
-		if _, _, err := enrichFromCannadb(db, store.CannadbBaseURL(), strainID, strain.Name, breederName(db, breederID)); err != nil {
+		cdbRec, cdbVal, err := enrichFromCannadb(db, store.CannadbBaseURL(), strainID, strain.Name, breederName(db, breederID))
+		if err != nil {
 			fieldLogger.WithError(err).Warn("CannaDB gap-fill failed")
 		}
+		packagingOffer = offerCannadbPackagingImage(c.Request.Context(), db, UploadDirFromContext(c), strainID, cdbRec, cdbVal)
 	}
 
 	// Refresh in-memory caches so the UI reflects the import immediately.
@@ -174,6 +177,8 @@ func StraincompassImportHandler(c *gin.Context) {
 		"breeder":           breederName(db, breederID),
 		"straincompass_url": StraincompassWebURL(rec.Slug),
 		"message":           T(c, "api_straincompass_imported"),
+		// URL of a CannaDB seed-pack image held for the user to accept; "" when none.
+		"packaging_image_offer": packagingOffer,
 	})
 }
 

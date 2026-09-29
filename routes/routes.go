@@ -339,6 +339,12 @@ func AddProtectedApiRoutes(r *gin.RouterGroup) {
 	r.GET("/strains/straincompass/preview", handlers.StraincompassPreviewHandler)
 	r.POST("/strains/straincompass/import", handlers.StraincompassImportHandler)
 
+	// Seed-pack (packaging) image: upload, remove, or accept/discard a held CannaDB offer.
+	r.POST("/strains/:id/packaging-image", handlers.UploadPackagingImageHandler)
+	r.DELETE("/strains/:id/packaging-image", handlers.DeletePackagingImageHandler)
+	r.POST("/strains/:id/packaging-image/accept", handlers.AcceptPackagingImageHandler)
+	r.POST("/strains/:id/packaging-image/discard", handlers.DiscardPackagingImageHandler)
+
 	// Lineage (protected write)
 	r.POST("/strains/:id/lineage", handlers.AddLineageHandler)
 	r.PUT("/strains/:id/lineage", handlers.SetLineageHandler)
@@ -433,6 +439,7 @@ func AddProtectedRoutes(r *gin.RouterGroup, version string) {
 			"currentPath":     currentPath,
 			"version":         version,
 			"strain":          handlers.GetStrain(handlers.DBFromContext(c), c.Param("id")),
+			"packagingOffer":  handlers.PendingPackagingURL(c),
 			"breeders":        store.Breeders(),
 			"plants":          handlers.GetLivingPlants(handlers.DBFromContext(c)),
 			"activities":      store.Activities(),

@@ -276,6 +276,11 @@ type Strain struct {
 	LineageSource    string `json:"lineage_source,omitempty"`
 	LineageSourceURI string `json:"lineage_source_uri,omitempty"`
 
+	// PackagingImage is the seed-pack image file, stored like plant images
+	// (e.g. "uploads/strains/strain_3_packaging_123.webp"; pages prefix "/").
+	// Empty when none.
+	PackagingImage string `json:"packaging_image,omitempty"`
+
 	// Expected height/yield as free text with units, e.g. "90-150cm".
 	HeightIndoor  string `json:"height_indoor,omitempty"`
 	HeightOutdoor string `json:"height_outdoor,omitempty"`

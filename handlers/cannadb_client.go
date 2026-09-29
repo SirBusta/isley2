@@ -117,6 +117,17 @@ type cannadbStrainValue struct {
 	SourceURL        string        `json:"sourceUrl"`
 	Parents          []string      `json:"parents"`     // at-uris
 	ParentNames      []string      `json:"parentNames"` // display fallbacks
+	PrimaryImage     *cannadbBlob  `json:"primaryImage"` // seed-pack artwork, when present
+}
+
+// cannadbBlob is an atproto blob reference; the bytes live on the record
+// author's PDS and are fetched with com.atproto.sync.getBlob.
+type cannadbBlob struct {
+	Ref struct {
+		Link string `json:"$link"`
+	} `json:"ref"`
+	MimeType string `json:"mimeType"`
+	Size     int64  `json:"size"`
 }
 
 // cannadbBreederValue is the subset of the breeder record Isley imports.

@@ -24,6 +24,49 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // --- Seed pack image (saved immediately, independent of the form) ---
+    const packagingCard = document.getElementById("packagingCard");
+    if (packagingCard) {
+        const base = `/strains/${packagingCard.dataset.strainId}/packaging-image`;
+        const preview = document.getElementById("packagingPreview");
+        const uploadBtn = document.getElementById("packagingUploadBtn");
+        const removeBtn = document.getElementById("packagingRemoveBtn");
+        const fileInput = document.getElementById("packagingFile");
+
+        const render = (url) => {
+            preview.classList.toggle("d-none", !url);
+            if (url) preview.src = url + "?t=" + Date.now(); else preview.removeAttribute("src");
+            removeBtn.classList.toggle("d-none", !url);
+            uploadBtn.textContent = url ? uploadBtn.dataset.replace : uploadBtn.dataset.upload;
+        };
+
+        const send = async (method, path, body) => {
+            const resp = await fetch(base + path, { method, body });
+            const data = await resp.json().catch(() => ({}));
+            if (typeof uiMessages !== "undefined") uiMessages.showToast(data.message || data.error || "", resp.ok ? "success" : "danger");
+            if (resp.ok) {
+                render(data.packaging_image);
+                // Accept, discard and upload all resolve a waiting CannaDB image.
+                const pending = document.getElementById("packagingPending");
+                if (pending && method === "POST") pending.remove();
+            }
+        };
+
+        uploadBtn.addEventListener("click", () => fileInput.click());
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+            const form = new FormData();
+            form.append("image", file);
+            send("POST", "", form);
+            fileInput.value = "";
+        });
+        removeBtn.addEventListener("click", () => send("DELETE", ""));
+        packagingCard.querySelectorAll("[data-packaging-action]").forEach(btn => {
+            btn.addEventListener("click", () => send("POST", "/" + btn.dataset.packagingAction));
+        });
+    }
+
     // --- Cannabinoids + effects/flavors/terpenes/medical-uses lists ---
     const profileCard = document.getElementById("strainProfileCard");
     const removeLabel = profileCard ? profileCard.dataset.remove : "";

@@ -60,6 +60,15 @@
                         <i class="fa-solid fa-dna me-1"></i> {{ .lcl.title_strain }} Info
                     </h2>
 
+                    {{ if .strain.PackagingImage }}
+                    <div class="text-center mb-3">
+                        <a href="/{{ .strain.PackagingImage }}" target="_blank" rel="noopener">
+                            <img src="/{{ .strain.PackagingImage }}" alt="{{ .lcl.packaging_image }}: {{ .strain.Name }}"
+                                 class="img-fluid rounded" style="max-height:220px" loading="lazy">
+                        </a>
+                    </div>
+                    {{ end }}
+
                     <!-- Type badge -->
                     <div class="text-center mb-3">
                         {{ if .strain.Autoflower }}

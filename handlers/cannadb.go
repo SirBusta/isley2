@@ -165,6 +165,8 @@ func CannadbImportHandler(c *gin.Context) {
 		"breeder_id":  breederID,
 		"breeder":     breederName(db, breederID),
 		"cannadb_url": cannadbWebURL(req.URI),
+		// URL of a CannaDB seed-pack image held for the user to accept; "" when none.
+		"packaging_image_offer": offerCannadbPackagingImage(c.Request.Context(), db, UploadDirFromContext(c), strainID, rec, val),
 		"message":     T(c, "api_cannadb_imported"),
 	})
 }

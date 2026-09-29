@@ -155,6 +155,36 @@
                     </div>
                 </div>
 
+                <!-- Seed pack image: actions apply immediately (not part of Save) -->
+                <div class="card mb-4" id="packagingCard" data-strain-id="{{ .strain.ID }}">
+                    <div class="card-body">
+                        <h2 class="h5 card-title text-primary mb-3">
+                            <i class="fa-solid fa-image me-1"></i> {{ .lcl.packaging_image }}
+                        </h2>
+                        {{ if .packagingOffer }}
+                        <div class="alert alert-info d-flex flex-wrap align-items-center gap-2" id="packagingPending">
+                            <img src="{{ .packagingOffer }}" alt="" class="img-thumbnail" style="max-width:90px">
+                            <span class="me-auto">{{ .lcl.packaging_pending_on_edit }}</span>
+                            <button type="button" class="btn btn-sm btn-success" data-packaging-action="accept">{{ .lcl.packaging_offer_import }}</button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" data-packaging-action="discard">{{ .lcl.packaging_offer_skip }}</button>
+                        </div>
+                        {{ end }}
+                        <div class="d-flex flex-wrap align-items-center gap-3">
+                            <img id="packagingPreview" alt="{{ .lcl.packaging_image }}" class="img-thumbnail{{ if not .strain.PackagingImage }} d-none{{ end }}"
+                                 style="max-width:160px" {{ if .strain.PackagingImage }}src="/{{ .strain.PackagingImage }}"{{ end }}>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="packagingUploadBtn"
+                                        data-upload="{{ .lcl.packaging_upload }}" data-replace="{{ .lcl.packaging_replace }}">
+                                    {{ if .strain.PackagingImage }}{{ .lcl.packaging_replace }}{{ else }}{{ .lcl.packaging_upload }}{{ end }}
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-danger{{ if not .strain.PackagingImage }} d-none{{ end }}" id="packagingRemoveBtn">{{ .lcl.packaging_remove }}</button>
+                                <input type="file" id="packagingFile" class="d-none" accept="image/jpeg,image/png,image/gif,image/webp">
+                            </div>
+                        </div>
+                        <small class="text-muted d-block mt-2">{{ .lcl.packaging_image_help }}</small>
+                    </div>
+                </div>
+
                 <!-- Cannabinoids + effects/flavors/terpenes/medical uses -->
                 <div class="card mb-4" id="strainProfileCard" data-remove="{{ .lcl.strain_attr_remove }}">
                     <div class="card-body">

@@ -300,7 +300,8 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		       coalesce(s.straincompass_slug, ''), coalesce(s.straincompass_updated_at, ''), s.thc_min, s.thc_max, s.cbd_min, s.cbd_max, s.cbn_max, s.cbg_max,
 		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, ''),
 		       coalesce(s.height_indoor, ''), coalesce(s.height_outdoor, ''), coalesce(s.yield_indoor, ''), coalesce(s.yield_outdoor, ''),
-		       coalesce(s.seed_location, ''), coalesce(s.lineage_source, ''), coalesce(s.lineage_source_uri, '')
+		       coalesce(s.seed_location, ''), coalesce(s.lineage_source, ''), coalesce(s.lineage_source_uri, ''),
+		       coalesce(s.packaging_image, '')
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		WHERE s.id = $1`, id).Scan(
@@ -308,7 +309,8 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		&strain.StraincompassSlug, &strain.StraincompassUpdatedAt, &strain.ThcMin, &strain.ThcMax, &strain.CbdMin, &strain.CbdMax, &strain.CbnMax, &strain.CbgMax,
 		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote,
 		&strain.HeightIndoor, &strain.HeightOutdoor, &strain.YieldIndoor, &strain.YieldOutdoor,
-		&strain.SeedLocation, &strain.LineageSource, &strain.LineageSourceURI)
+		&strain.SeedLocation, &strain.LineageSource, &strain.LineageSourceURI,
+		&strain.PackagingImage)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			fieldLogger.Error("Strain not found")
@@ -684,6 +686,9 @@ func DeleteStrainHandler(c *gin.Context) {
 	// Open the database
 	db := DBFromContext(c)
 
+	var packaging sql.NullString
+	_ = db.QueryRow("SELECT packaging_image FROM strain WHERE id = $1", id).Scan(&packaging)
+
 	result, err := db.Exec(`DELETE FROM strain WHERE id = $1`, id)
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to delete strain")
@@ -697,6 +702,10 @@ func DeleteStrainHandler(c *gin.Context) {
 		apiNotFound(c, "api_strain_not_found")
 		return
 	}
+
+	uploadDir := UploadDirFromContext(c)
+	removeStrainImageFile(uploadDir, packaging.String)
+	removePendingPackaging(uploadDir, id)
 
 	apiOK(c, "api_strain_deleted")
 }
