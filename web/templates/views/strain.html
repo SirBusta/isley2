@@ -294,7 +294,9 @@
 
 <script nonce="{{ .cspNonce }}">
     var currentStrainID = {{ .strain.ID }};
-    var currentStrainName = "{{ .strain.Name | js }}";
+    // html/template quotes and escapes this for JavaScript itself; an extra
+    // `js` filter double-escapes names with apostrophes ("Runtz \'n\' Roses").
+    var currentStrainName = {{ .strain.Name }};
 </script>
 <script src="/static/js/strain-lineage.js"></script>
 <script src="/static/js/strain-descendants.js"></script>
