@@ -76,7 +76,7 @@ func newImportServer(t *testing.T) *importServer {
 	t.Cleanup(upstream.Close)
 
 	db := testutil.NewTestDB(t)
-	server := testutil.NewTestServer(t, db)
+	server := testutil.NewTestServer(t, db, testutil.WithUploadDir(t.TempDir()))
 	server.ConfigStore.SetStraincompassEnabled(1)
 	server.ConfigStore.SetStraincompassBaseURL(upstream.URL + "/sc/api/")
 	server.ConfigStore.SetCannadbEnabled(1)

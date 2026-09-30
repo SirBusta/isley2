@@ -12,6 +12,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const breederAc = IsleyAutocomplete.breederPicker(editBreederSelect, editNewBreederName);
 
+    // Review mode (Review Strain Info page): start from the source's breeder
+    // name — an existing breeder when one matches, otherwise a new one.
+    const reviewMode = editStrainForm && editStrainForm.dataset.mode === "review";
+    const initialBreeder = editBreederSelect && editBreederSelect.dataset.initialBreeder;
+    if (breederAc && initialBreeder) breederAc.setNewName(initialBreeder);
+
+    const reviewFile = document.getElementById("reviewPackagingFile");
+    document.querySelectorAll('input[name="reviewPackaging"]').forEach(radio => {
+        radio.addEventListener("change", () => {
+            if (reviewFile) reviewFile.classList.toggle("d-none", radio.value !== "upload" || !radio.checked);
+        });
+    });
+
     // "Flowering Time" for photoperiods, "Seed to Harvest" for autoflowers.
     const autoflowerSelect = document.getElementById("editAutoflower");
     if (autoflowerSelect) {
@@ -253,6 +266,11 @@ document.addEventListener("DOMContentLoaded", () => {
             };
             if (profileCard) Object.assign(payload, collectProfile());
 
+            if (reviewMode) {
+                saveReview(payload);
+                return;
+            }
+
             fetch(`/strains/${strainId}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
@@ -286,6 +304,66 @@ document.addEventListener("DOMContentLoaded", () => {
                     }
                 });
         });
+    }
+
+    // Parents as the draft had them, compared ignoring order and case, so an
+    // untouched parent list keeps its "from StrainCompass/CannaDB" note.
+    function sameParents(a, b) {
+        const key = (list) => (list || [])
+            .map(p => (p.parent_name || "").trim().toLowerCase() + "|" + (p.parent_strain_id || ""))
+            .sort().join(";");
+        return key(a) === key(b);
+    }
+
+    async function saveReview(payload) {
+        const reviewEl = document.getElementById("importReview");
+        const draft = JSON.parse(reviewEl.dataset.draft || "{}");
+        payload.parents = typeof window.collectLineageParents === "function" ? window.collectLineageParents() : [];
+        payload.provenance = draft.provenance;
+        payload.keep_lineage_source = sameParents(payload.parents, draft.parents);
+
+        const checked = document.querySelector('input[name="reviewPackaging"]:checked');
+        const choice = checked ? checked.value : "none";
+        const file = reviewFile && reviewFile.files[0];
+        if (choice === "upload" && !file) {
+            reviewFile.classList.remove("d-none");
+            reviewFile.focus();
+            return;
+        }
+        // "keep" without a held CannaDB image means keeping the strain's current one.
+        payload.packaging = {
+            choice: choice === "keep" && !draft.packaging_token ? "existing" : choice,
+            token: draft.packaging_token || "",
+        };
+
+        const fail = (msg) => {
+            if (typeof uiMessages !== "undefined") uiMessages.showToast(msg || uiMessages.t("api_failed_to_add_strain"), "danger");
+        };
+        let data;
+        try {
+            const resp = await fetch("/strains/import/save", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload),
+            });
+            data = await resp.json().catch(() => ({}));
+            if (!resp.ok) return fail(data.error);
+        } catch (e) {
+            return fail();
+        }
+
+        if (choice === "upload" && file) {
+            const form = new FormData();
+            form.append("image", file);
+            const up = await fetch(`/strains/${data.id}/packaging-image`, { method: "POST", body: form }).catch(() => null);
+            if (!up || !up.ok) {
+                const err = up ? await up.json().catch(() => ({})) : {};
+                // The strain is saved; say why the image wasn't, then continue to it.
+                fail(err.error);
+                await new Promise(r => setTimeout(r, 2500));
+            }
+        }
+        window.location.href = `/strain/${data.id}`;
     }
 
     // --- Delete ---

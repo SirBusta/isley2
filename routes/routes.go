@@ -338,6 +338,9 @@ func AddProtectedApiRoutes(r *gin.RouterGroup) {
 	r.GET("/strains/straincompass/search", handlers.StraincompassSearchHandler)
 	r.POST("/strains/straincompass/import", handlers.StraincompassImportHandler)
 
+	// Save a reviewed import (see /strain/import/review).
+	r.POST("/strains/import/save", handlers.SaveImportedStrainHandler)
+
 	// Seed-pack (packaging) image: upload, remove, or accept/discard a held CannaDB offer.
 	r.POST("/strains/:id/packaging-image", handlers.UploadPackagingImageHandler)
 	r.DELETE("/strains/:id/packaging-image", handlers.DeletePackagingImageHandler)
@@ -417,6 +420,32 @@ func AddProtectedRoutes(r *gin.RouterGroup, version string) {
 			"breeders":        store.Breeders(),
 			"measurements":    store.Metrics(),
 			"sensors":         handlers.GetSensors(handlers.DBFromContext(c)),
+			"plants":          handlers.GetLivingPlants(handlers.DBFromContext(c)),
+			"activities":      store.Activities(),
+			"loggedIn":        sessions.Default(c).Get("logged_in"),
+			"lcl":             translations,
+			"languages":       utils.AvailableLanguages,
+			"currentLanguage": lang,
+			"csrfToken":       c.GetString("csrf_token"),
+			"cspNonce":        c.GetString("cspNonce"),
+		})
+	})
+
+	// Review an import before saving: the Edit Strain page in review mode.
+	r.GET("/strain/import/review", func(c *gin.Context) {
+		lang := utils.GetLanguage(c)
+		translations := utils.TranslationService.GetTranslations(lang)
+		currentPath, _ := c.Get("currentPath")
+		store := handlers.ConfigStoreFromContext(c)
+		review := handlers.PrepareImportReview(c)
+		c.HTML(http.StatusOK, "views/strain-edit.html", gin.H{
+			"title":           "Review Strain Info",
+			"currentPath":     currentPath,
+			"version":         version,
+			"strain":          review.Strain,
+			"reviewMode":      true,
+			"review":          review,
+			"breeders":        store.Breeders(),
 			"plants":          handlers.GetLivingPlants(handlers.DBFromContext(c)),
 			"activities":      store.Activities(),
 			"loggedIn":        sessions.Default(c).Get("logged_in"),

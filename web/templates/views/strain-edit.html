@@ -7,26 +7,61 @@
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="/strains">{{ .lcl.title_strains }}</a></li>
+            {{ if .reviewMode }}
+            <li class="breadcrumb-item active" aria-current="page">{{ .lcl.review_title }}</li>
+            {{ else }}
             <li class="breadcrumb-item"><a href="/strain/{{ .strain.ID }}">{{ .strain.Name }}</a></li>
             <li class="breadcrumb-item active" aria-current="page">{{ .lcl.edit_strain }}</li>
+            {{ end }}
         </ol>
     </nav>
 
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1 class="h3 text-primary mb-0">
+            {{ if .reviewMode }}
+            <i class="fa-solid fa-clipboard-check me-2"></i>{{ .lcl.review_title }}{{ if .strain.Name }}: {{ .strain.Name }}{{ end }}
+            {{ else }}
             <i class="fa-solid fa-pen-to-square me-2"></i>{{ .lcl.edit_strain }}: {{ .strain.Name }}
+            {{ end }}
         </h1>
         <div>
-            <a href="/strain/{{ .strain.ID }}" class="btn btn-secondary me-2">
-                <i class="fa-solid fa-xmark me-1"></i> Cancel
+            <a href="{{ if .reviewMode }}/strains{{ else }}/strain/{{ .strain.ID }}{{ end }}" class="btn btn-secondary me-2">
+                <i class="fa-solid fa-xmark me-1"></i> {{ .lcl.cancel }}
             </a>
+            {{ if not .reviewMode }}
             <button type="button" class="btn btn-danger" id="deleteStrainButton">
                 <i class="fa-solid fa-trash me-1"></i> {{ .lcl.delete_strain }}
             </button>
+            {{ end }}
         </div>
     </div>
 
-    <form id="editStrainForm">
+    {{ if and .reviewMode .review.Error }}
+    <div class="alert alert-danger">
+        <i class="fa-solid fa-triangle-exclamation me-1"></i>{{ .review.Error }}
+    </div>
+    <a href="/strains" class="btn btn-outline-secondary"><i class="fa-solid fa-arrow-left me-1"></i> {{ .lcl.review_back_to_strains }}</a>
+    {{ else }}
+
+    {{ if .reviewMode }}
+    <div class="alert alert-info" id="importReview"
+         data-draft="{{ json .review.Draft }}"
+         data-saved="{{ .lcl.api_import_saved }}">
+        <div class="fw-semibold mb-1"><i class="fa-solid fa-circle-info me-1"></i>{{ .lcl.review_banner }}</div>
+        <div class="small">
+            {{ .lcl.review_source_label }} {{ .review.SourceName }}{{ if .review.SourceURL }} ·
+            <a href="{{ .review.SourceURL }}" target="_blank" rel="noopener noreferrer">{{ .lcl.review_view_listing }}</a>{{ end }}
+        </div>
+        {{ if .review.ExistingID }}
+        <div class="small mt-1" id="reviewExistingNote">
+            <i class="fa-solid fa-rotate me-1"></i>{{ .lcl.review_existing_note }}
+            <a href="/strain/{{ .review.ExistingID }}" target="_blank" rel="noopener">{{ .strain.Name }} ({{ .review.ExistingBreeder }})</a>
+        </div>
+        {{ end }}
+    </div>
+    {{ end }}
+
+    <form id="editStrainForm"{{ if .reviewMode }} data-mode="review"{{ end }}>
         <input type="hidden" id="editStrainId" value="{{ .strain.ID }}">
 
         <div class="row g-4">
@@ -54,10 +89,11 @@
                                         data-ac-new-text="{{ .lcl.breeder_add_new_named }}"
                                         data-ac-did-you-mean="{{ .lcl.autocomplete_did_you_mean }}"
                                         data-ac-suggested="{{ .lcl.autocomplete_suggested }}"
-                                        data-ac-results="{{ .lcl.autocomplete_results }}">
+                                        data-ac-results="{{ .lcl.autocomplete_results }}"
+                                        {{ if .reviewMode }}data-initial-breeder="{{ .strain.Breeder }}"{{ end }}>
                                     <option value=""></option>
                                     {{ range .breeders }}
-                                    <option value="{{ .ID }}" {{ if eq .ID $.strain.BreederID }}selected{{ end }}>{{ .Name }}</option>
+                                    <option value="{{ .ID }}" {{ if and (not $.reviewMode) (eq .ID $.strain.BreederID) }}selected{{ end }}>{{ .Name }}</option>
                                     {{ end }}
                                     <option value="new">{{ .lcl.add_new_breeder }}</option>
                                 </select>
@@ -155,6 +191,44 @@
                     </div>
                 </div>
 
+                {{ if .reviewMode }}
+                <!-- Seed pack image choice, applied when the review is saved -->
+                <div class="card mb-4" id="reviewPackagingCard">
+                    <div class="card-body">
+                        <h2 class="h5 card-title text-primary mb-3">
+                            <i class="fa-solid fa-image me-1"></i> {{ .lcl.packaging_image }}
+                        </h2>
+                        {{ if .review.PackagingURL }}
+                        <p class="small mb-2">{{ .lcl.review_packaging_found }}</p>
+                        <img src="{{ .review.PackagingURL }}" alt="{{ .lcl.packaging_image }}" class="img-thumbnail mb-2 d-block" style="max-width:180px">
+                        {{ else if .strain.PackagingImage }}
+                        <p class="small mb-2">{{ .lcl.review_packaging_existing }}</p>
+                        <img src="/{{ .strain.PackagingImage }}" alt="{{ .lcl.packaging_image }}" class="img-thumbnail mb-2 d-block" style="max-width:180px">
+                        {{ end }}
+                        <div class="d-flex flex-wrap gap-3">
+                            {{ if or .review.PackagingURL .strain.PackagingImage }}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="reviewPackaging" id="reviewPackagingKeep" value="keep" checked>
+                                <label class="form-check-label" for="reviewPackagingKeep">{{ if .review.PackagingURL }}{{ .lcl.packaging_offer_import }}{{ else }}{{ .lcl.review_packaging_keep_existing }}{{ end }}</label>
+                            </div>
+                            {{ end }}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="reviewPackaging" id="reviewPackagingUpload" value="upload">
+                                <label class="form-check-label" for="reviewPackagingUpload">{{ .lcl.packaging_offer_upload }}</label>
+                            </div>
+                            {{ if not .strain.PackagingImage }}
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="reviewPackaging" id="reviewPackagingNone" value="none"{{ if not .review.PackagingURL }} checked{{ end }}>
+                                <label class="form-check-label" for="reviewPackagingNone">{{ .lcl.review_packaging_none }}</label>
+                            </div>
+                            {{ end }}
+                        </div>
+                        <input type="file" id="reviewPackagingFile" class="form-control form-control-sm mt-2 d-none" style="max-width:320px"
+                               accept="image/jpeg,image/png,image/gif,image/webp">
+                        <small class="text-muted d-block mt-2">{{ .lcl.packaging_image_help }}</small>
+                    </div>
+                </div>
+                {{ else }}
                 <!-- Seed pack image: actions apply immediately (not part of Save) -->
                 <div class="card mb-4" id="packagingCard" data-strain-id="{{ .strain.ID }}">
                     <div class="card-body">
@@ -184,6 +258,7 @@
                         <small class="text-muted d-block mt-2">{{ .lcl.packaging_image_help }}</small>
                     </div>
                 </div>
+                {{ end }}
 
                 <!-- Cannabinoids + effects/flavors/terpenes/medical uses -->
                 <div class="card mb-4" id="strainProfileCard" data-remove="{{ .lcl.strain_attr_remove }}">
@@ -241,7 +316,8 @@
                              data-results="{{ .lcl.autocomplete_results }}"
                              data-linked="{{ .lcl.lineage_linked }}"
                              data-unlinked="{{ .lcl.lineage_unlinked }}"
-                             data-remove="{{ .lcl.lineage_remove_parent }}">
+                             data-remove="{{ .lcl.lineage_remove_parent }}"
+                             {{ if .reviewMode }}data-initial-parents="{{ json .review.Draft.Parents }}"{{ end }}>
                             <div id="lineageEntries"></div>
                             <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="addParentBtn">
                                 <i class="fa-solid fa-plus me-1"></i> {{ .lcl.lineage_add_parent }}
@@ -281,7 +357,7 @@
                 <div class="d-flex justify-content-end mb-4">
                     <button type="submit" class="btn btn-primary btn-lg">
                         <span class="spinner-border spinner-border-sm btn-spinner" role="status" aria-hidden="true"></span>
-                        <i class="fa-solid fa-check me-1"></i> {{ .lcl.save_changes }}
+                        <i class="fa-solid fa-check me-1"></i> {{ if .reviewMode }}{{ .lcl.review_save }}{{ else }}{{ .lcl.save_changes }}{{ end }}
                     </button>
                 </div>
             </div>
@@ -301,6 +377,7 @@
             </div>
         </div>
     </form>
+    {{ end }}
 </div>
 
 <script nonce="{{ .cspNonce }}">

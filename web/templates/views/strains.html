@@ -142,7 +142,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const lcl = {
         noMatch: "{{ .lcl.strains_no_match }}",
         noneInStock: "{{ .lcl.strains_none_in_stock }}",
-        addedOutOfStock: "{{ .lcl.strains_added_out_of_stock }}",
         seedLocation: "{{ .lcl.seed_location }}",
     };
 
@@ -489,16 +488,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     emptyShowOutOfStock.addEventListener("click", () => showView("out-of-stock"));
 
-    // Import modals live in separate scripts, so they reach the list through this hook.
-    window.isleyStrains = {
-        async refreshAfterAdd(id, name) {
-            await fetchStrains(currentView);
-            if (currentView === "in-stock" && !allStrains.some(s => s.id === id)) {
-                if (window.uiMessages) uiMessages.showToast(lcl.addedOutOfStock.replace("{name}", name || ""), "info");
-            }
-        },
-    };
-
     // A Back/Forward restore from the bfcache skips DOMContentLoaded, leaving a stale list.
     window.addEventListener("pageshow", (e) => {
         if (e.persisted) fetchStrains(currentView);
@@ -508,118 +497,6 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchStrains(currentView);
 });
 </script>
-
-{{ if .loggedIn }}
-<script nonce="{{ .cspNonce }}">
-    // "Keep CannaDB's seed-pack image?" prompt inside an import modal:
-    // import it, upload your own instead, or leave the strain without one.
-    window.IsleyPackagingOffer = function (panel) {
-        const q = (role) => panel.querySelector(`[data-role="${role}"]`);
-        let strainID = null;
-
-        function hide() {
-            panel.classList.add("d-none");
-            strainID = null;
-        }
-
-        async function send(path, opts) {
-            if (!strainID) return;
-            const resp = await fetch(`/strains/${strainID}/packaging-image${path}`, Object.assign({ method: "POST" }, opts));
-            const data = await resp.json().catch(() => ({}));
-            if (window.uiMessages) uiMessages.showToast(data.message || data.error || "", resp.ok ? "success" : "danger");
-            if (resp.ok) hide();
-        }
-
-        q("accept").addEventListener("click", () => send("/accept"));
-        q("skip").addEventListener("click", () => send("/discard"));
-        q("upload").addEventListener("click", () => q("file").click());
-        q("file").addEventListener("change", () => {
-            const file = q("file").files[0];
-            if (!file) return;
-            const form = new FormData();
-            form.append("image", file);
-            send("", { body: form });
-            q("file").value = "";
-        });
-
-        return {
-            show(id, name, url) {
-                strainID = id;
-                q("title").textContent = panel.dataset.title.replace("{name}", name || "");
-                q("preview").src = url + "?t=" + Date.now();
-                q("preview").alt = name || "";
-                panel.classList.remove("d-none");
-                panel.scrollIntoView({ block: "nearest" });
-            },
-        };
-    };
-
-    // Drives one "which breeder?" step inside an import modal. ask() resolves
-    // to {breeder_id} / {new_breeder}, or null when cancelled.
-    window.IsleyImportBreederStep = function (form) {
-        const select = form.querySelector('[data-role="select"]');
-        const newName = form.querySelector('[data-role="newname"]');
-        const title = form.querySelector('[data-role="title"]');
-        const sourceBtn = form.querySelector('[data-role="source"]');
-        const ac = IsleyAutocomplete.breederPicker(select, newName);
-        let pending = null;
-
-        function finish(choice) {
-            form.classList.add("d-none");
-            const resolve = pending;
-            pending = null;
-            if (resolve) resolve(choice);
-        }
-
-        form.addEventListener("submit", (e) => {
-            e.preventDefault();
-            ac.commit();
-            if (!select.value) {
-                ac.input.classList.add("is-invalid");
-                ac.input.focus();
-                return;
-            }
-            ac.input.classList.remove("is-invalid");
-            finish(select.value === "new"
-                ? { new_breeder: newName.value }
-                : { breeder_id: parseInt(select.value, 10) });
-        });
-        form.querySelector('[data-role="cancel"]').addEventListener("click", () => finish(null));
-        sourceBtn.addEventListener("click", () => ac.setNewName(sourceBtn.dataset.name));
-
-        return {
-            ask(strainName) {
-                if (pending) finish(null);
-                title.textContent = form.dataset.title.replace("{name}", strainName || "");
-                ac.reset();
-                ac.input.classList.remove("is-invalid");
-                this.setSource("", "");
-                form.classList.remove("d-none");
-                form.scrollIntoView({ block: "nearest" });
-                ac.input.focus();
-                return new Promise((resolve) => { pending = resolve; });
-            },
-            setSource(name, sourceLabel) {
-                if (!name) {
-                    sourceBtn.classList.add("d-none");
-                    return;
-                }
-                sourceBtn.dataset.name = name;
-                sourceBtn.textContent = form.dataset.useSource.replace("{name}", name).replace("{source}", sourceLabel);
-                sourceBtn.classList.remove("d-none");
-            },
-            addBreeder(id, name) {
-                if (!id || select.querySelector(`option[value="${id}"]`)) return;
-                const opt = document.createElement("option");
-                opt.value = id;
-                opt.textContent = name;
-                select.insertBefore(opt, select.querySelector('option[value="new"]'));
-                ac.refreshItems();
-            },
-        };
-    };
-</script>
-{{ end }}
 
 {{ if and .loggedIn .cannadbEnabled }}
 <!-- CannaDB import modal: search by name, one-click import -->
@@ -640,8 +517,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         <i class="fa-solid fa-search me-1"></i> {{ .lcl.cannadb_search_button }}
                     </button>
                 </form>
-                {{ template "strain-import-breeder-step" . }}
-                {{ template "strain-import-packaging-offer" . }}
                 <div id="cannadbSearchStatus" class="text-muted small mb-2"></div>
                 <div id="cannadbResults" class="list-group"></div>
             </div>
@@ -662,9 +537,6 @@ document.addEventListener("DOMContentLoaded", () => {
             noResults: "{{ .lcl.cannadb_no_results }}",
             searchFailed: "{{ .lcl.api_cannadb_search_failed }}",
             importBtn: "{{ .lcl.cannadb_import_action }}",
-            importing: "{{ .lcl.cannadb_importing }}",
-            imported: "{{ .lcl.api_cannadb_imported }}",
-            importFailed: "{{ .lcl.api_cannadb_import_failed }}",
             match: "{{ .lcl.cannadb_match }}",
         };
 
@@ -697,47 +569,14 @@ document.addEventListener("DOMContentLoaded", () => {
                         '<button type="button" class="btn btn-sm btn-success flex-shrink-0">' + esc(lcl.importBtn) + '</button>' +
                     '</div>';
                 const btn = item.querySelector("button");
-                btn.addEventListener("click", () => startImport(r, btn));
+                btn.addEventListener("click", () => startImport(r));
                 results.appendChild(item);
             });
         }
 
-        const breederStep = IsleyImportBreederStep(form.closest(".modal-body").querySelector(".import-breeder-step"));
-        const packagingOffer = IsleyPackagingOffer(form.closest(".modal-body").querySelector(".import-packaging-offer"));
-
-        async function startImport(r, btn) {
-            const ask = breederStep.ask(r.name);
-            if (r.breeder_name) breederStep.setSource(r.breeder_name, "CannaDB");
-            const choice = await ask;
-            if (choice) importStrain(r.uri, btn, choice);
-        }
-
-        function importStrain(uri, btn, choice) {
-            btn.disabled = true;
-            btn.textContent = lcl.importing;
-            fetch("/strains/cannadb/import", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(Object.assign({ uri: uri }, choice)),
-            })
-                .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
-                .then(({ ok, data }) => {
-                    if (!ok) throw new Error((data && (data.message || data.error)) || lcl.importFailed);
-                    if (window.uiMessages) uiMessages.showToast((data && data.message) || lcl.imported, "success");
-                    breederStep.addBreeder(data.breeder_id, data.breeder);
-                    if (data.packaging_image_offer) packagingOffer.show(data.id, data.name, data.packaging_image_offer);
-                    // Left enabled: the same strain can be imported again for another breeder.
-                    btn.disabled = false;
-                    btn.classList.remove("btn-success");
-                    btn.classList.add("btn-outline-secondary");
-                    btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>' + esc(lcl.imported);
-                    if (window.isleyStrains) isleyStrains.refreshAfterAdd(data.id, data.name);
-                })
-                .catch((err) => {
-                    if (window.uiMessages) uiMessages.showToast(err.message || lcl.importFailed, "danger");
-                    btn.disabled = false;
-                    btn.textContent = lcl.importBtn;
-                });
+        // Nothing is saved here: the Review Strain Info page shows the data first.
+        function startImport(r) {
+            window.location.href = "/strain/import/review?source=cannadb&uri=" + encodeURIComponent(r.uri);
         }
 
         form.addEventListener("submit", (e) => {
@@ -779,8 +618,6 @@ document.addEventListener("DOMContentLoaded", () => {
                         <i class="fa-solid fa-search me-1"></i> {{ .lcl.straincompass_search_button }}
                     </button>
                 </form>
-                {{ template "strain-import-breeder-step" . }}
-                {{ template "strain-import-packaging-offer" . }}
                 <div id="straincompassSearchStatus" class="text-muted small mb-2"></div>
                 <div id="straincompassResults" class="list-group"></div>
             </div>
@@ -802,9 +639,6 @@ document.addEventListener("DOMContentLoaded", () => {
             noResults: "{{ .lcl.straincompass_no_results }}",
             searchFailed: "{{ .lcl.api_straincompass_search_failed }}",
             importBtn: "{{ .lcl.straincompass_import_action }}",
-            importing: "{{ .lcl.straincompass_importing }}",
-            imported: "{{ .lcl.api_straincompass_imported }}",
-            importFailed: "{{ .lcl.api_straincompass_import_failed }}",
             unknownBreeder: "{{ .lcl.straincompass_unknown_breeder }}",
             showing: "{{ .lcl.straincompass_showing_of }}",
         };
@@ -842,49 +676,16 @@ document.addEventListener("DOMContentLoaded", () => {
                         '<button type="button" class="btn btn-sm btn-success flex-shrink-0">' + esc(lcl.importBtn) + '</button>' +
                     '</div>';
                 const btn = item.querySelector("button");
-                btn.addEventListener("click", () => startImport(r, btn));
+                btn.addEventListener("click", () => startImport(r));
                 results.appendChild(item);
             });
         }
 
-        const breederStep = IsleyImportBreederStep(form.closest(".modal-body").querySelector(".import-breeder-step"));
-        const packagingOffer = IsleyPackagingOffer(form.closest(".modal-body").querySelector(".import-packaging-offer"));
-
-        async function startImport(r, btn) {
-            const ask = breederStep.ask(r.name);
-            if (r.breeder) breederStep.setSource(r.breeder, "StrainCompass");
-            const choice = await ask;
-            if (choice) importStrain(r, btn, choice);
-        }
-
-        function importStrain(r, btn, choice) {
-            const name = r.name;
-            btn.disabled = true;
-            btn.textContent = lcl.importing;
-            fetch("/strains/straincompass/import", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                // listing_breeder lets the server find this exact listing among many same-named ones.
-                body: JSON.stringify(Object.assign({ slug: r.slug, name: r.name, listing_breeder: r.breeder || "" }, choice)),
-            })
-                .then((resp) => resp.json().then((data) => ({ ok: resp.ok, data })))
-                .then(({ ok, data }) => {
-                    if (!ok) throw new Error((data && (data.message || data.error)) || lcl.importFailed);
-                    if (window.uiMessages) uiMessages.showToast((data && data.message) || lcl.imported, "success");
-                    breederStep.addBreeder(data.breeder_id, data.breeder);
-                    if (data.packaging_image_offer) packagingOffer.show(data.id, data.name, data.packaging_image_offer);
-                    // Left enabled: the same strain can be imported again for another breeder.
-                    btn.disabled = false;
-                    btn.classList.remove("btn-success");
-                    btn.classList.add("btn-outline-secondary");
-                    btn.innerHTML = '<i class="fa-solid fa-check me-1"></i>' + esc(lcl.imported);
-                    if (window.isleyStrains) isleyStrains.refreshAfterAdd(data.id, data.name || name);
-                })
-                .catch((err) => {
-                    if (window.uiMessages) uiMessages.showToast(err.message || lcl.importFailed, "danger");
-                    btn.disabled = false;
-                    btn.textContent = lcl.importBtn;
-                });
+        // Nothing is saved here: the Review Strain Info page shows the data first.
+        // listing_breeder lets the server find this exact listing among many similar ones.
+        function startImport(r) {
+            const q = new URLSearchParams({ source: "straincompass", slug: r.slug, name: r.name, listing_breeder: r.breeder || "" });
+            window.location.href = "/strain/import/review?" + q.toString();
         }
 
         form.addEventListener("submit", (e) => {
@@ -912,49 +713,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
 {{ template "common/footer.html" .}}
 
-{{ end }}
-
-{{ define "strain-import-packaging-offer" }}
-<!-- Shown after an import when CannaDB has a seed-pack image; the image is already held locally by Isley. -->
-<div class="import-packaging-offer border border-info rounded p-3 mb-3 d-none" role="dialog"
-     data-title="{{ .lcl.packaging_offer_title }}">
-    <div class="fw-semibold mb-2" data-role="title"></div>
-    <img data-role="preview" alt="" class="img-thumbnail mb-2 d-block" style="max-width:180px">
-    <div class="d-flex flex-wrap gap-2">
-        <button type="button" class="btn btn-sm btn-success" data-role="accept">{{ .lcl.packaging_offer_import }}</button>
-        <button type="button" class="btn btn-sm btn-outline-primary" data-role="upload">{{ .lcl.packaging_offer_upload }}</button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-role="skip">{{ .lcl.packaging_offer_skip }}</button>
-        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" class="d-none" data-role="file">
-    </div>
-</div>
-{{ end }}
-
-{{ define "strain-import-breeder-step" }}
-<!-- Breeder choice shown after clicking Import: listings name a seller, not necessarily the breeder the grower bought from. -->
-<form class="import-breeder-step border rounded p-3 mb-3 d-none" novalidate
-      data-title="{{ .lcl.import_breeder_title }}"
-      data-use-source="{{ .lcl.import_breeder_use_source }}">
-    <div class="fw-semibold mb-2" data-role="title"></div>
-    <select class="form-select" data-role="select" required
-            data-ac-placeholder="{{ .lcl.breeder_search_placeholder }}"
-            data-ac-new-text="{{ .lcl.breeder_add_new_named }}"
-            data-ac-did-you-mean="{{ .lcl.autocomplete_did_you_mean }}"
-            data-ac-suggested="{{ .lcl.autocomplete_suggested }}"
-            data-ac-results="{{ .lcl.autocomplete_results }}">
-        <option value="" selected></option>
-        {{ range .breeders }}
-        <option value="{{ .ID }}">{{ .Name }}</option>
-        {{ end }}
-        <option value="new">{{ .lcl.add_new_breeder }}</option>
-    </select>
-    <input type="hidden" data-role="newname">
-    <button type="button" class="btn btn-sm btn-outline-info mt-2 d-none" data-role="source"></button>
-    <div class="form-text">{{ .lcl.import_breeder_hint }}</div>
-    <div class="d-flex gap-2 mt-2">
-        <button type="submit" class="btn btn-sm btn-success">
-            <i class="fa-solid fa-cloud-arrow-down me-1"></i>{{ .lcl.import_breeder_confirm }}
-        </button>
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-role="cancel">{{ .lcl.cancel }}</button>
-    </div>
-</form>
 {{ end }}

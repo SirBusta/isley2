@@ -3,7 +3,9 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +19,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -228,6 +231,95 @@ func webPath(p string) string {
 	return "/" + strings.TrimPrefix(filepath.ToSlash(p), "/")
 }
 
+// downloadCannadbPackagingImage fetches a CannaDB record's seed-pack image
+// (its primaryImage blob), if it has one.
+func downloadCannadbPackagingImage(ctx context.Context, rec *cannadbRecord, val *cannadbStrainValue) ([]byte, string, bool) {
+	if rec == nil || val == nil || val.PrimaryImage == nil || val.PrimaryImage.Ref.Link == "" {
+		return nil, "", false
+	}
+	did := rec.DID
+	if did == "" {
+		did = didFromATURI(rec.URI)
+	}
+	body, ext, err := defaultBlobFetcher.fetchBlob(ctx, did, val.PrimaryImage.Ref.Link)
+	if err != nil {
+		logger.Log.WithField("func", "downloadCannadbPackagingImage").WithError(err).Warn("Could not fetch CannaDB seed-pack image")
+		return nil, "", false
+	}
+	return body, ext, true
+}
+
+// Draft images belong to a review page that hasn't been saved yet; they are
+// keyed by a random token instead of a strain id.
+var draftTokenRe = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+const draftPackagingMaxAge = 24 * time.Hour
+
+func draftPackagingPath(uploadDir, token string) string {
+	if !draftTokenRe.MatchString(token) {
+		return ""
+	}
+	matches, _ := filepath.Glob(filepath.Join(pendingPackagingDir(uploadDir), "draft_"+token+".*"))
+	if len(matches) == 0 {
+		return ""
+	}
+	return matches[0]
+}
+
+func removeDraftPackaging(uploadDir, token string) {
+	if p := draftPackagingPath(uploadDir, token); p != "" {
+		_ = os.Remove(p)
+	}
+}
+
+// cleanupStaleDraftPackaging deletes draft images from review pages that
+// were abandoned more than a day ago.
+func cleanupStaleDraftPackaging(uploadDir string) {
+	matches, _ := filepath.Glob(filepath.Join(pendingPackagingDir(uploadDir), "draft_*"))
+	for _, m := range matches {
+		if info, err := os.Stat(m); err == nil && time.Since(info.ModTime()) > draftPackagingMaxAge {
+			_ = os.Remove(m)
+		}
+	}
+}
+
+// stageDraftPackagingImage saves image bytes for an unsaved review page and
+// returns its token and URL.
+func stageDraftPackagingImage(uploadDir string, body []byte, ext string) (token, url string, err error) {
+	cleanupStaleDraftPackaging(uploadDir)
+	buf := make([]byte, 16)
+	if _, err = rand.Read(buf); err != nil {
+		return "", "", err
+	}
+	token = hex.EncodeToString(buf)
+	if err = os.MkdirAll(pendingPackagingDir(uploadDir), 0o755); err != nil {
+		return "", "", err
+	}
+	p := filepath.Join(pendingPackagingDir(uploadDir), "draft_"+token+ext)
+	if err = os.WriteFile(p, body, 0o644); err != nil {
+		return "", "", err
+	}
+	return token, webPath(p), nil
+}
+
+// adoptDraftPackagingImage makes a draft image the strain's packaging image.
+func adoptDraftPackagingImage(db *sql.DB, uploadDir, token string, strainID int) error {
+	draft := draftPackagingPath(uploadDir, token)
+	if draft == "" {
+		return errors.New("draft image not found")
+	}
+	final := filepath.Join(strainsUploadDir(uploadDir),
+		fmt.Sprintf("strain_%d_packaging_%d%s", strainID, time.Now().UnixNano(), filepath.Ext(draft)))
+	if err := os.Rename(draft, final); err != nil {
+		return err
+	}
+	if err := setPackagingImage(db, uploadDir, strainID, final); err != nil {
+		_ = os.Remove(final)
+		return err
+	}
+	return nil
+}
+
 // offerCannadbPackagingImage downloads the CannaDB record's seed-pack image
 // into the holding spot when the strain has no packaging image yet, and
 // returns its URL for the "keep it?" prompt ("" when nothing is offered).
@@ -239,13 +331,8 @@ func offerCannadbPackagingImage(ctx context.Context, db *sql.DB, uploadDir strin
 	if err := db.QueryRow("SELECT packaging_image FROM strain WHERE id = $1", strainID).Scan(&current); err != nil || current.String != "" {
 		return ""
 	}
-	did := rec.DID
-	if did == "" {
-		did = didFromATURI(rec.URI)
-	}
-	body, ext, err := defaultBlobFetcher.fetchBlob(ctx, did, val.PrimaryImage.Ref.Link)
-	if err != nil {
-		logger.Log.WithField("func", "offerCannadbPackagingImage").WithError(err).Warn("Could not fetch CannaDB seed-pack image")
+	body, ext, ok := downloadCannadbPackagingImage(ctx, rec, val)
+	if !ok {
 		return ""
 	}
 	if err := os.MkdirAll(pendingPackagingDir(uploadDir), 0o755); err != nil {

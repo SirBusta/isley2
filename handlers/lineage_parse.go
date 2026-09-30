@@ -162,11 +162,16 @@ func clearLineageSource(db *sql.DB, strainID any) {
 	}
 }
 
+// rowsQuerier is satisfied by both *sql.DB and *sql.Tx.
+type rowsQuerier interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+}
+
 // uniqueLocalStrainID returns the id of the only strain (other than
 // excludeID) named name, case-insensitively, or nil when there are none or
 // several (the same strain from two breeders).
-func uniqueLocalStrainID(tx *sql.Tx, name string, excludeID int) (any, error) {
-	rows, err := tx.Query("SELECT id FROM strain WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 2", name, excludeID)
+func uniqueLocalStrainID(q rowsQuerier, name string, excludeID int) (any, error) {
+	rows, err := q.Query("SELECT id FROM strain WHERE LOWER(name) = LOWER($1) AND id <> $2 LIMIT 2", name, excludeID)
 	if err != nil {
 		return nil, err
 	}

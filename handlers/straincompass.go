@@ -423,6 +423,20 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 // database — and groups StrainCompass has no sourced data for are left as
 // they are, so values the user entered by hand survive a re-import.
 func replaceStraincompassAttributes(db *sql.DB, strainID int, rec *straincompassStrain) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := replaceStrainAttributes(tx, strainID, straincompassAttributeSet(rec)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// straincompassAttributeSet returns the record's attribute groups that
+// StrainCompass marks "sourced"; other groups are nil (left untouched).
+func straincompassAttributeSet(rec *straincompassStrain) strainAttributeSet {
 	var set strainAttributeSet
 	sourced := func(p string) bool { return p == straincompassProvenanceSourced }
 
@@ -454,16 +468,7 @@ func replaceStraincompassAttributes(db *sql.DB, strainID int, rec *straincompass
 		}
 		set.MedicalUses = &attrs
 	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := replaceStrainAttributes(tx, strainID, set); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return set
 }
 
 // respondStraincompassError maps a client error to an appropriate API

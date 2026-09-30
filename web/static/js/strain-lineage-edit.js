@@ -15,10 +15,19 @@ document.addEventListener("DOMContentLoaded", () => {
     const rows = []; // { row, select, newName, ac }
     let allStrains = [];
 
+    // On the Review Strain Info page the parents come from the import draft,
+    // not from a saved strain.
+    let initialParents = null;
+    if (lbl.initialParents) {
+        try { initialParents = JSON.parse(lbl.initialParents) || []; } catch (e) { initialParents = []; }
+    }
+
     const ready = Promise.all([
         fetch("/strains/in-stock", { cache: "no-store" }).then(r => r.json()).catch(() => []),
         fetch("/strains/out-of-stock", { cache: "no-store" }).then(r => r.json()).catch(() => []),
-        fetch(`/strains/${currentStrainID}/lineage`, { cache: "no-store" }).then(r => r.json()).catch(() => []),
+        initialParents !== null
+            ? Promise.resolve(initialParents)
+            : fetch(`/strains/${currentStrainID}/lineage`, { cache: "no-store" }).then(r => r.json()).catch(() => []),
     ]).then(([inStock, outOfStock, lineage]) => {
         allStrains = [...(inStock || []), ...(outOfStock || [])]
             .filter(s => s.id !== currentStrainID)
@@ -32,6 +41,9 @@ document.addEventListener("DOMContentLoaded", () => {
             r.ac.input.focus();
         });
     });
+
+    // The parents as the review page saves them with the strain.
+    window.collectLineageParents = collectParents;
 
     // Called by strain-edit.js after the strain itself saves.
     window.saveLineage = function () {
