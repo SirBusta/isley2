@@ -127,20 +127,17 @@ func TestMapStraincompassStrain(t *testing.T) {
 		}
 	})
 
-	t.Run("autoflower pre-set from floweringType, else from the name", func(t *testing.T) {
+	t.Run("autoflower only when floweringType says so, else photoperiod", func(t *testing.T) {
 		cases := []struct {
 			name, floweringType string
 			want                bool
 		}{
 			{"Haze Automatic", "AUTOFLOWER", true},
-			{"Plain Name", "AUTOFLOWER", true},
-			{"White Widow Automatic", "UNKNOWN", true}, // the live record that prompted this
-			{"Gelato Auto", "", true},
-			{"Dfa Autoflowering", "UNKNOWN", true},
-			{"auto blow dream (aka: auto blue dream)", "UNKNOWN", true},
+			{"Plain Name", "autoflower", true},
+			{"White Widow Automatic", "UNKNOWN", false}, // no guessing from the name
+			{"Gelato Auto", "", false},
 			{"Blue Dream", "UNKNOWN", false},
-			{"Autobahn Kush", "UNKNOWN", false}, // "auto" only as a whole word
-			{"Northern Lights Auto", "PHOTOPERIOD", false},
+			{"Northern Lights", "PHOTOPERIOD", false},
 		}
 		for _, tc := range cases {
 			s := mapStraincompassStrain(&straincompassStrain{Name: tc.name, FloweringType: tc.floweringType})

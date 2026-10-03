@@ -269,8 +269,8 @@ func mergeWithExisting(db *sql.DB, r *ImportReview, sourceParents []string) []st
 	s.ID = ex.ID
 	s.SeedCount, s.SeedLocation, s.PackagingImage = ex.SeedCount, ex.SeedLocation, ex.PackagingImage
 	if r.Draft.Provenance.Source == importSourceStraincompass {
-		// StrainCompass's autoflower hint (its floweringType, or the
-		// strain's name) can only turn the existing setting on, not off.
+		// StrainCompass's floweringType can only turn the existing
+		// Autoflower setting on, not off.
 		s.Autoflower = s.Autoflower || ex.Autoflower
 	}
 	if s.Url == "" {

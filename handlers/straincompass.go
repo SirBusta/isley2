@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -290,23 +289,13 @@ func mapStraincompassStrain(rec *straincompassStrain) types.Strain {
 	return strain
 }
 
-// autoflowerNamePattern matches the words breeders put in an autoflower's
-// name ("White Widow Automatic", "Gelato Auto", "Dfa Autoflowering").
-var autoflowerNamePattern = regexp.MustCompile(`(?i)\b(auto|automatic|autoflower|autoflowering|autoflowered)\b`)
-
-// straincompassIsAutoflower pre-sets the Autoflower field on import. Only
-// used to fill in that field (still editable on the review page), not
-// stored. StrainCompass's own floweringType wins when it's set, but it's
-// "UNKNOWN" for most records — including "White Widow Automatic" — so fall
-// back to the strain's name.
+// straincompassIsAutoflower pre-sets the Autoflower field on import (still
+// editable on the review page). Only StrainCompass's own floweringType
+// counts; it's "UNKNOWN" for most records, and anything other than
+// AUTOFLOWER defaults to photoperiod — no guessing from the name (user
+// decision 2026-10-03).
 func straincompassIsAutoflower(rec *straincompassStrain) bool {
-	switch strings.ToUpper(strings.TrimSpace(rec.FloweringType)) {
-	case "AUTOFLOWER":
-		return true
-	case "PHOTOPERIOD":
-		return false
-	}
-	return autoflowerNamePattern.MatchString(rec.Name)
+	return strings.EqualFold(strings.TrimSpace(rec.FloweringType), "AUTOFLOWER")
 }
 
 func trimmedStr(p *string) string {
@@ -387,8 +376,8 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			verified = 0
 		}
 	}
-	// A re-import only ever turns Autoflower on (when StrainCompass or the
-	// name says so), never off, so it can't undo the user's own setting.
+	// A re-import only ever turns Autoflower on (when StrainCompass says
+	// AUTOFLOWER), never off, so it can't undo the user's own setting.
 	autoflower := 0
 	if s.Autoflower {
 		autoflower = 1

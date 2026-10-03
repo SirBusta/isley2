@@ -36,9 +36,10 @@ const fakeCannadbGelatoSearch = `{"strains":[
 	{"uri":"at://did:plc:test/org.cannadb.strain/gelato33","name":"Gelato #33","breederName":"Cookies"},
 	{"uri":"` + fakeCannadbGelatoURI + `","name":"Gelato","breederName":"Cookies"}]}`
 
-// Like the live record: StrainCompass reports floweringType "UNKNOWN", so
-// the Autoflower pre-set has to come from the name.
+// Like the live records: most say floweringType "UNKNOWN" (even with
+// "Automatic" in the name); a few say "AUTOFLOWER".
 const fakeStraincompassAuto = `{"strains":[{"slug":"white-widow-automatic","name":"White Widow Automatic","breeder":"Royal Queen Seeds","floweringType":"UNKNOWN","floweringTimeMax":9,"lineage":""}],"total":1}`
+const fakeStraincompassFlaggedAuto = `{"strains":[{"slug":"haze-automatic","name":"Haze Automatic","breeder":"Dinafem Seeds","floweringType":"AUTOFLOWER","floweringTimeMax":11,"lineage":""}],"total":1}`
 
 const fakeCannadbGelato = `{"uri":"` + fakeCannadbGelatoURI + `","indexedAt":"2026-01-01T00:00:00Z","value":{"name":"Gelato","breederName":"Cookies","parentNames":["Sunset Sherbet","Thin Mint GSC"]}}`
 
@@ -60,6 +61,8 @@ func newImportServer(t *testing.T) *importServer {
 				_, _ = w.Write([]byte(fakeStraincompassGelato))
 			} else if q.Get("q") == "White Widow Automatic" {
 				_, _ = w.Write([]byte(fakeStraincompassAuto))
+			} else if q.Get("q") == "Haze Automatic" {
+				_, _ = w.Write([]byte(fakeStraincompassFlaggedAuto))
 			} else {
 				_, _ = w.Write([]byte(fakeStraincompassList))
 			}
