@@ -39,11 +39,6 @@
             </div>
 
             {{ if .loggedIn }}
-            {{ if .cannadbEnabled }}
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#cannadbImportModal" title="{{ .lcl.cannadb_import_title }}">
-                <i class="fa-solid fa-cloud-arrow-down me-1"></i> {{ .lcl.cannadb_import_button }}
-            </button>
-            {{ end }}
             {{ if .straincompassEnabled }}
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#straincompassImportModal" title="{{ .lcl.straincompass_import_title }}">
                 <i class="fa-solid fa-flask me-1"></i> {{ .lcl.straincompass_import_button }}
@@ -545,7 +540,9 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 
 {{ if and .loggedIn .cannadbEnabled }}
-<!-- CannaDB import modal: search by name, one-click import -->
+<!-- CannaDB import modal: search by name, one-click import. No button opens
+     it any more (StrainCompass is the import source; user decision
+     2026-10-03) — kept, with its endpoints, so it can be brought back. -->
 <div class="modal fade" id="cannadbImportModal" tabindex="-1" aria-labelledby="cannadbImportModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
