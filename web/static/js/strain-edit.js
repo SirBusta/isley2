@@ -255,7 +255,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 seed_location: document.getElementById("editSeedLocation").value,
                 description: descriptionTextarea.value,
                 short_desc: document.getElementById("editStrainShortDescription").value,
-                cycle_time: parseInt(document.getElementById("editCycleTime").value, 10),
+                // Entered in weeks, stored as days (the harvest-date math uses days).
+                cycle_time: Math.round((parseFloat(document.getElementById("editCycleTime").value) || 0) * 7),
                 url: document.getElementById("editUrl").value,
                 growing: {
                     height_indoor: document.getElementById("editHeightIndoor").value,

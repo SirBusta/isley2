@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -396,6 +397,11 @@ func buildFuncMap(store *config.Store) template.FuncMap {
 		// value it points to — needed for tri-state (nil/false/true)
 		// fields like Strain.StraincompassVerified.
 		"boolPtr": func(b *bool) bool { return b != nil && *b },
+		// daysToWeeks shows a day count (how cycle_time is stored) in weeks,
+		// with one decimal only when needed: 63 -> "9", 60 -> "8.6".
+		"daysToWeeks": func(days int) string {
+			return strconv.FormatFloat(math.Round(float64(days)/7*10)/10, 'f', -1, 64)
+		},
 		// dict builds a map from key/value pairs so a shared sub-template
 		// can take several arguments: {{ template "x" (dict "k" v ...) }}.
 		"dict": func(pairs ...any) (map[string]any, error) {

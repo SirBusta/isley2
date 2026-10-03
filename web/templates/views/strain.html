@@ -157,7 +157,7 @@
                             <span class="strain-info-label"><i class="fa-solid fa-clock me-2"></i>{{ if .strain.Autoflower }}{{ .lcl.seed_to_harvest }}{{ else }}{{ .lcl.flowering_time }}{{ end }}</span>
                             <span class="strain-info-value">
                                 {{ if gt .strain.CycleTime 0 }}
-                                    {{ .strain.CycleTime }} {{ .lcl.title_days }}
+                                    {{ daysToWeeks .strain.CycleTime }} {{ .lcl.unit_weeks }}
                                 {{ else }}
                                     {{ .lcl.na }}
                                 {{ end }}
