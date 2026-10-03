@@ -78,6 +78,8 @@
                     <option value="seeds-asc">{{ .lcl.sort_fewest_seeds }}</option>
                     <option value="added-asc">{{ .lcl.sort_oldest_seeds }}</option>
                     <option value="added-desc">{{ .lcl.sort_newest_seeds }}</option>
+                    <option value="cycle-asc">{{ .lcl.sort_shortest_flowering }}</option>
+                    <option value="cycle-desc">{{ .lcl.sort_longest_flowering }}</option>
                 </select>
             </div>
             <div class="strains-filter-group">
@@ -106,6 +108,7 @@
                     <th class="st-th-type">Type</th>
                     <th class="st-th-ratio st-sortable" data-sort="indica">Indica/Sativa <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
                     <th class="st-th-seeds st-sortable" data-sort="seeds">Seeds <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
+                    <th class="st-th-cycle st-sortable" data-sort="cycle">{{ .lcl.flowering_time }} <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
                     <th class="st-th-added st-sortable" data-sort="added">{{ .lcl.seeds_added_on }} <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
                 </tr>
             </thead>
@@ -150,7 +153,21 @@ document.addEventListener("DOMContentLoaded", () => {
         ageNew: "{{ .lcl.seed_age_new }}",
         ageMonths: "{{ .lcl.seed_age_months }}",
         ageYears: "{{ .lcl.seed_age_years }}",
+        floweringTime: "{{ .lcl.flowering_time }}",
+        seedToHarvest: "{{ .lcl.seed_to_harvest }}",
+        weeksShort: "{{ .lcl.weeks_short }}",
+        seedToHarvestShort: "{{ .lcl.seed_to_harvest_short }}",
     };
+
+    // Flowering Time (photoperiods) or Seed to Harvest (autoflowers), stored
+    // in days and shown in weeks with one decimal only when needed.
+    function cycleInfo(s) {
+        if (!(s.cycle_time > 0)) return "";
+        const weeks = String(Math.round(s.cycle_time / 7 * 10) / 10);
+        const text = (s.autoflower ? lcl.seedToHarvestShort : lcl.weeksShort).replace("%s", weeks);
+        const title = s.autoflower ? lcl.seedToHarvest : lcl.floweringTime;
+        return `<span class="sc-cycle text-muted" title="${esc(title)}"><i class="fa-solid fa-clock me-1"></i>${esc(text)}</span>`;
+    }
 
     // How long seeds have been in stock, from "YYYY-MM-DD" (same rules as
     // the strain page's seedAge): "less than a month", "7 mo", "2 yr 3 mo".
@@ -195,7 +212,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ----- Fetch strains -----
     async function fetchStrains(view) {
         cardsContainer.innerHTML = `<div class="text-center py-5" style="flex-basis:100%"><div class="spinner-border text-primary" role="status"></div></div>`;
-        tableBody.innerHTML = `<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="8" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
         try {
             // no-store: on Back navigation the browser otherwise replays a stale cached list.
             const res = await fetch(`/strains/${view}`, { cache: "no-store" });
@@ -204,7 +221,7 @@ document.addEventListener("DOMContentLoaded", () => {
             applyFilters();
         } catch (e) {
             cardsContainer.innerHTML = `<p class="text-danger text-center" style="flex-basis:100%">Failed to load strains.</p>`;
-            tableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Failed to load strains.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="8" class="text-danger text-center">Failed to load strains.</td></tr>`;
         }
     }
 
@@ -275,6 +292,17 @@ document.addEventListener("DOMContentLoaded", () => {
                     return asc ? a.sativa - b.sativa : b.sativa - a.sativa;
                 case "seeds":
                     return asc ? a.seed_count - b.seed_count : b.seed_count - a.seed_count;
+                case "cycle": {
+                    // Photoperiods (flowering time) first, then autoflowers (seed to
+                    // harvest), so the two kinds of numbers are never mixed; strains
+                    // with no time set go last within their group.
+                    if (a.autoflower !== b.autoflower) return a.autoflower ? 1 : -1;
+                    const ca = a.cycle_time > 0 ? a.cycle_time : null;
+                    const cb = b.cycle_time > 0 ? b.cycle_time : null;
+                    const byName = (a.name || "").localeCompare(b.name || "");
+                    if (ca === null || cb === null) return ((ca === null ? 1 : 0) - (cb === null ? 1 : 0)) || byName;
+                    return (asc ? ca - cb : cb - ca) || byName;
+                }
                 case "added":
                     // Strains with no date (unknown, or out of stock) go last either way.
                     va = a.seed_count > 0 ? (a.seeds_added_on || "") : "";
@@ -326,6 +354,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 ? `<p class="sc-desc">${esc(s.short_desc)}</p>`
                 : "";
 
+            const cycleHtml = cycleInfo(s) ? `<div class="sc-cycle-row small">${cycleInfo(s)}</div>` : "";
+
             const linkIcon = s.url
                 ? `<span class="sc-ext-link" data-href="${esc(s.url)}" title="Breeder page"><i class="fa-solid fa-arrow-up-right-from-square"></i></span>`
                 : "";
@@ -343,6 +373,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     <div class="sc-card-body">
                         ${shortDesc}
                         ${lineageHtml}
+                        ${cycleHtml}
                     </div>
                     <div class="sc-card-footer">
                         <div class="sc-meta-left">
@@ -395,6 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
                 </td>
                 <td class="text-center">${seedBadge}</td>
+                <td class="text-nowrap small">${cycleInfo(s) || '<span class="text-muted">—</span>'}</td>
                 <td class="text-nowrap small">${s.seed_count > 0 && s.seeds_added_on ? esc(s.seeds_added_on) : '<span class="text-muted">—</span>'}</td>
             </tr>`;
         }).join("");
@@ -475,6 +507,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 "indica": tableSort.asc ? null : "indica-desc",
                 "seeds": tableSort.asc ? "seeds-asc" : "seeds-desc",
                 "added": tableSort.asc ? "added-asc" : "added-desc",
+                "cycle": tableSort.asc ? "cycle-asc" : "cycle-desc",
             }[sortKey];
             if (mappedSort && sortBy.querySelector(`option[value="${mappedSort}"]`)) {
                 sortBy.value = mappedSort;

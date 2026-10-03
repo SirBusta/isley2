@@ -1217,6 +1217,13 @@ header .nav-link.active::after {
 .sc-lineage i {
     opacity: 0.6;
 }
+.sc-cycle-row {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+}
+.sc-cycle i {
+    opacity: 0.6;
+}
 
 /* Card footer */
 .sc-card-footer {
