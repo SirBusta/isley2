@@ -127,6 +127,29 @@ func TestMapStraincompassStrain(t *testing.T) {
 		}
 	})
 
+	t.Run("autoflower pre-set from floweringType, else from the name", func(t *testing.T) {
+		cases := []struct {
+			name, floweringType string
+			want                bool
+		}{
+			{"Haze Automatic", "AUTOFLOWER", true},
+			{"Plain Name", "AUTOFLOWER", true},
+			{"White Widow Automatic", "UNKNOWN", true}, // the live record that prompted this
+			{"Gelato Auto", "", true},
+			{"Dfa Autoflowering", "UNKNOWN", true},
+			{"auto blow dream (aka: auto blue dream)", "UNKNOWN", true},
+			{"Blue Dream", "UNKNOWN", false},
+			{"Autobahn Kush", "UNKNOWN", false}, // "auto" only as a whole word
+			{"Northern Lights Auto", "PHOTOPERIOD", false},
+		}
+		for _, tc := range cases {
+			s := mapStraincompassStrain(&straincompassStrain{Name: tc.name, FloweringType: tc.floweringType})
+			if s.Autoflower != tc.want {
+				t.Errorf("%q (%q): Autoflower = %v, want %v", tc.name, tc.floweringType, s.Autoflower, tc.want)
+			}
+		}
+	})
+
 	t.Run("description imported directly", func(t *testing.T) {
 		rec := &straincompassStrain{Name: "X", Description: "Marketing copy from a seed bank.", ShortDescription: "Short."}
 		s := mapStraincompassStrain(rec)

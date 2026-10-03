@@ -121,11 +121,23 @@ func TestImportReview_ExistingStrainKeepsUserValues(t *testing.T) {
 	assert.Contains(t, page, `href="/strain/`+strconv.Itoa(id)+`"`, "links the strain it will update")
 	assert.Regexp(t, `id="editSeedCount"[^>]*value="7"`, page)
 	assert.Regexp(t, `id="editSeedLocation"[^>]*value="Jar 2"`, page)
-	assert.Regexp(t, `<option value="true" selected`, page, "StrainCompass has no autoflower flag, so the user's is kept")
+	assert.Regexp(t, `<option value="true" selected`, page, "no autoflower hint for Blue Dream, so the user's Yes is kept")
 	d := parseDraft(t, page)
 	require.Len(t, d.Parents, 1)
 	assert.Equal(t, "My Own Parent", d.Parents[0].Name, "the user's own parents win over the source's")
 	assert.Empty(t, d.Provenance.LineageSource)
+}
+
+func TestImportReview_AutoflowerPresetFromName(t *testing.T) {
+	t.Parallel()
+	s := newImportServer(t)
+
+	_, page := s.reviewPage(t, url.Values{"source": {"straincompass"}, "slug": {"white-widow-automatic"},
+		"name": {"White Widow Automatic"}, "listing_breeder": {"Royal Queen Seeds"}})
+	assert.Regexp(t, `<option value="true" selected`, page, "an \"Automatic\" strain arrives with Autoflower = Yes")
+
+	_, page = s.reviewPage(t, scReviewQuery())
+	assert.NotRegexp(t, `<option value="true" selected`, page, "Blue Dream stays a photoperiod")
 }
 
 func TestImportReview_Errors(t *testing.T) {

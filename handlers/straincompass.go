@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"net/http"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -268,6 +269,7 @@ func mapStraincompassStrain(rec *straincompassStrain) types.Strain {
 		Description:              rec.Description, // imported directly, including any third-party copy
 		ShortDescription:         rec.ShortDescription,
 		CycleTime:                cycleTime,
+		Autoflower:               straincompassIsAutoflower(rec),
 		StraincompassSlug:        rec.Slug,
 		StraincompassUpdatedAt:   rec.UpdatedAt,
 		ThcMin:                   rec.ThcMin,
@@ -286,6 +288,25 @@ func mapStraincompassStrain(rec *straincompassStrain) types.Strain {
 		YieldOutdoor:             trimmedStr(rec.YieldOutdoor),
 	}
 	return strain
+}
+
+// autoflowerNamePattern matches the words breeders put in an autoflower's
+// name ("White Widow Automatic", "Gelato Auto", "Dfa Autoflowering").
+var autoflowerNamePattern = regexp.MustCompile(`(?i)\b(auto|automatic|autoflower|autoflowering|autoflowered)\b`)
+
+// straincompassIsAutoflower pre-sets the Autoflower field on import. Only
+// used to fill in that field (still editable on the review page), not
+// stored. StrainCompass's own floweringType wins when it's set, but it's
+// "UNKNOWN" for most records — including "White Widow Automatic" — so fall
+// back to the strain's name.
+func straincompassIsAutoflower(rec *straincompassStrain) bool {
+	switch strings.ToUpper(strings.TrimSpace(rec.FloweringType)) {
+	case "AUTOFLOWER":
+		return true
+	case "PHOTOPERIOD":
+		return false
+	}
+	return autoflowerNamePattern.MatchString(rec.Name)
 }
 
 func trimmedStr(p *string) string {
@@ -366,6 +387,12 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			verified = 0
 		}
 	}
+	// A re-import only ever turns Autoflower on (when StrainCompass or the
+	// name says so), never off, so it can't undo the user's own setting.
+	autoflower := 0
+	if s.Autoflower {
+		autoflower = 1
+	}
 
 	var id int
 	err := db.QueryRow("SELECT id FROM strain WHERE straincompass_slug = $1 AND breeder_id = $2", s.StraincompassSlug, breederID).Scan(&id)
@@ -382,7 +409,8 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			    straincompass_verified = $15, straincompass_quality_score = $16,
 			    straincompass_sources = $17, straincompass_lineage_note = $18,
 			    height_indoor = COALESCE($19, height_indoor), height_outdoor = COALESCE($20, height_outdoor),
-			    yield_indoor = COALESCE($21, yield_indoor), yield_outdoor = COALESCE($22, yield_outdoor)
+			    yield_indoor = COALESCE($21, yield_indoor), yield_outdoor = COALESCE($22, yield_outdoor),
+			    autoflower = CASE WHEN $24 = 1 THEN 1 ELSE autoflower END
 			WHERE id = $23`,
 			s.Name, breederID, s.Indica, s.Sativa,
 			s.Description, s.ShortDescription, s.CycleTime,
@@ -390,7 +418,7 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			s.CbdMin, s.CbdMax, s.CbnMax, s.CbgMax,
 			verified, s.StraincompassQuality,
 			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote),
-			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), id)
+			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), id, autoflower)
 		return id, uerr
 	case errors.Is(err, sql.ErrNoRows):
 		ierr := db.QueryRow(`
@@ -401,7 +429,7 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			                    straincompass_verified, straincompass_quality_score,
 			                    straincompass_sources, straincompass_lineage_note,
 			                    height_indoor, height_outdoor, yield_indoor, yield_outdoor)
-			VALUES ($1, $2, $3, $4, 0, 0, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+			VALUES ($1, $2, $3, $4, $24, 0, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
 			RETURNING id`,
 			s.Name, breederID, s.Indica, s.Sativa,
 			s.Description, s.ShortDescription, s.CycleTime,
@@ -409,7 +437,7 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			s.ThcMin, s.ThcMax, s.CbdMin, s.CbdMax, s.CbnMax, s.CbgMax,
 			verified, s.StraincompassQuality,
 			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote),
-			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor)).Scan(&id)
+			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), autoflower).Scan(&id)
 		return id, ierr
 	default:
 		return 0, err
