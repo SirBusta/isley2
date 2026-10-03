@@ -175,10 +175,31 @@
                                 {{ if gt .strain.SeedCount 0 }}
                                     <span class="badge bg-success">{{ .strain.SeedCount }} in stock</span>
                                 {{ else }}
-                                    <span class="badge bg-secondary">Out of stock</span>
+                                    <span class="badge bg-warning text-dark{{ if not .strain.Wanted }} d-none{{ end }}" id="strainWantedBadge"><i class="fa-solid fa-star me-1"></i>{{ .lcl.wanted }}</span>
+                                    <span class="badge bg-secondary{{ if .strain.Wanted }} d-none{{ end }}" id="strainOutOfStockBadge">Out of stock</span>
+                                    {{ if .loggedIn }}
+                                    <button type="button" class="btn btn-sm btn-outline-secondary ms-1 py-0" id="strainWantedToggle"
+                                            data-strain-id="{{ .strain.ID }}" data-wanted="{{ .strain.Wanted }}"
+                                            data-add="{{ .lcl.wanted_add }}" data-remove="{{ .lcl.wanted_remove }}">
+                                        {{ if .strain.Wanted }}{{ .lcl.wanted_remove }}{{ else }}{{ .lcl.wanted_add }}{{ end }}
+                                    </button>
+                                    {{ end }}
                                 {{ end }}
                             </span>
                         </li>
+                        {{ if gt .strain.SeedCount 0 }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-calendar-plus me-2"></i>{{ .lcl.seeds_added_on }}</span>
+                            <span class="strain-info-value">
+                                {{ with .strain.SeedsAddedOn }}
+                                    {{ . }}
+                                    {{ with seedAge . }}{{ if .OK }}<small class="text-muted">({{ template "common/seed-age" (dict "a" . "lcl" $.lcl) }})</small>{{ end }}{{ end }}
+                                {{ else }}
+                                    <span class="text-muted">{{ $.lcl.seeds_added_on_unknown }}</span>
+                                {{ end }}
+                            </span>
+                        </li>
+                        {{ end }}
                         {{ with .strain.SeedLocation }}
                         <li>
                             <span class="strain-info-label"><i class="fa-solid fa-box-archive me-2"></i>{{ $.lcl.seed_location }}</span>
@@ -303,6 +324,33 @@
     // html/template quotes and escapes this for JavaScript itself; an extra
     // `js` filter double-escapes names with apostrophes ("Runtz \'n\' Roses").
     var currentStrainName = {{ .strain.Name }};
+
+    // Add to / remove from the wish list (only shown while out of stock).
+    (function () {
+        const btn = document.getElementById("strainWantedToggle");
+        if (!btn) return;
+        btn.addEventListener("click", async () => {
+            const want = btn.dataset.wanted !== "true";
+            btn.disabled = true;
+            try {
+                const resp = await fetch(`/strains/${btn.dataset.strainId}/wanted`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ wanted: want }),
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (!resp.ok) throw new Error(data.error || "");
+                btn.dataset.wanted = String(data.wanted);
+                btn.textContent = data.wanted ? btn.dataset.remove : btn.dataset.add;
+                document.getElementById("strainWantedBadge").classList.toggle("d-none", !data.wanted);
+                document.getElementById("strainOutOfStockBadge").classList.toggle("d-none", data.wanted);
+            } catch (e) {
+                if (typeof uiMessages !== "undefined") uiMessages.showToast(e.message || uiMessages.t("api_failed_to_update_strain"), "danger");
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    })();
 </script>
 <script src="/static/js/strain-lineage.js"></script>
 <script src="/static/js/strain-descendants.js"></script>

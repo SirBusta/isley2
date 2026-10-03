@@ -246,6 +246,8 @@ type Strain struct {
 	SeedCount        int    `json:"seed_count"`
 	SeedLocation     string `json:"seed_location,omitempty"` // where the seeds are kept, e.g. "Jar 1"
 	SeedType         string `json:"seed_type,omitempty"`     // "clone", "feminized", "regular", or "" (not set)
+	Wanted           bool   `json:"wanted"`                  // on the wish list (only while seed_count is 0)
+	SeedsAddedOn     string `json:"seeds_added_on,omitempty"` // "2006-01-02" the current seeds were stocked; "" if unknown
 	CycleTime        int    `json:"cycle_time"`
 	Url              string `json:"url"`
 	ShortDescription string `json:"short_desc"`

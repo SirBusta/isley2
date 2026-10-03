@@ -1,0 +1,1 @@
+{{ define "common/seed-age" }}{{/* How long seeds have been in stock. Args: a (seedAge result), lcl. */}}{{ if lt .a.Total 1 }}{{ .lcl.seed_age_new }}{{ else if lt .a.Total 24 }}{{ printf .lcl.seed_age_months .a.Total }}{{ else }}{{ printf .lcl.seed_age_years .a.Years .a.Months }}{{ end }}{{ end }}

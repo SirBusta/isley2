@@ -402,6 +402,16 @@ func buildFuncMap(store *config.Store) template.FuncMap {
 		"daysToWeeks": func(days int) string {
 			return strconv.FormatFloat(math.Round(float64(days)/7*10)/10, 'f', -1, 64)
 		},
+		// seedAge is how long seeds have been in stock, from a strain's
+		// seeds_added_on date ("2006-01-02"); OK is false for an empty or
+		// unreadable date.
+		"seedAge": func(added string) seedAgeInfo {
+			now := time.Now()
+			if loc := configuredLocation(); loc != nil {
+				now = now.In(loc)
+			}
+			return seedAgeFrom(added, now)
+		},
 		// dict builds a map from key/value pairs so a shared sub-template
 		// can take several arguments: {{ template "x" (dict "k" v ...) }}.
 		"dict": func(pairs ...any) (map[string]any, error) {
@@ -556,4 +566,26 @@ func registerStaticRoutes(r *gin.Engine, assets fs.FS) {
 		}
 		c.Data(http.StatusOK, "image/x-icon", data)
 	})
+}
+
+// seedAgeInfo is a seed stock's age in whole months (Total), also split into
+// Years and Months for display.
+type seedAgeInfo struct {
+	OK                    bool
+	Total, Years, Months int
+}
+
+func seedAgeFrom(added string, now time.Time) seedAgeInfo {
+	t, err := time.Parse(utils.LayoutDate, added)
+	if err != nil {
+		return seedAgeInfo{}
+	}
+	months := (now.Year()-t.Year())*12 + int(now.Month()) - int(t.Month())
+	if now.Day() < t.Day() {
+		months--
+	}
+	if months < 0 {
+		months = 0
+	}
+	return seedAgeInfo{OK: true, Total: months, Years: months / 12, Months: months % 12}
 }

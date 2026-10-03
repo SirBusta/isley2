@@ -127,11 +127,13 @@ func AddPlant(c *gin.Context) {
 	}
 
 	if input.DecrementSeedCount {
+		// Using the last seed also clears the stocked date (nothing left to date).
+		clearDate := ", seeds_added_on = CASE WHEN seed_count <= 1 THEN NULL ELSE seeds_added_on END"
 		var query string
 		if model.IsPostgres() {
-			query = "UPDATE strain SET seed_count = GREATEST(0, seed_count - 1) WHERE id = $1"
+			query = "UPDATE strain SET seed_count = GREATEST(0, seed_count - 1)" + clearDate + " WHERE id = $1"
 		} else {
-			query = "UPDATE strain SET seed_count = MAX(0, seed_count - 1) WHERE id = $1"
+			query = "UPDATE strain SET seed_count = MAX(0, seed_count - 1)" + clearDate + " WHERE id = $1"
 		}
 		if _, err := tx.Exec(query, *input.StrainID); err != nil {
 			fieldLogger.WithError(err).Error("Failed to decrement seed count")

@@ -131,10 +131,26 @@
                                 <input type="number" class="form-control" id="editSeedCount" min="0" value="0">
                             </div>
 
-                            <!-- Seed Location -->
+                            <!-- Seeds added on -->
                             <div class="col-md-4">
+                                <label for="editSeedsAddedOn" class="form-label">{{ .lcl.seeds_added_on }}</label>
+                                <input type="date" class="form-control" id="editSeedsAddedOn" value="">
+                                <small class="text-muted">{{ .lcl.seeds_added_on_desc }}</small>
+                            </div>
+
+                            <!-- Seed Location -->
+                            <div class="col-md-8">
                                 <label for="editSeedLocation" class="form-label">{{ .lcl.seed_location }}</label>
                                 <input type="text" class="form-control" id="editSeedLocation" maxlength="255" placeholder="{{ .lcl.seed_location_placeholder }}">
+                            </div>
+
+                            <!-- Wanted -->
+                            <div class="col-md-4 d-flex align-items-end">
+                                <div class="form-check mb-2">
+                                    <input class="form-check-input" type="checkbox" id="editWanted">
+                                    <label class="form-check-label" for="editWanted">{{ .lcl.wanted_checkbox }}</label>
+                                    <div><small class="text-muted">{{ .lcl.wanted_desc }}</small></div>
+                                </div>
                             </div>
 
                             <!-- Growing information -->
@@ -204,6 +220,7 @@
     </form>
 </div>
 
+<script src="/static/js/strain-stock-fields.js"></script>
 <script src="/static/js/strain-add.js"></script>
 {{ template "common/footer.html" .}}
 

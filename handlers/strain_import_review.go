@@ -209,6 +209,10 @@ func buildImportReview(ctx context.Context, db *sql.DB, cannadbOn bool, s import
 	if r.ExistingID > 0 {
 		parentNames = mergeWithExisting(db, &r, parentNames)
 	}
+	if r.ExistingID == 0 {
+		// Importing a strain you don't have yet usually means you want it.
+		r.Strain.Wanted = true
+	}
 	r.Draft.Parents = linkParents(db, parentNames, r.ExistingID)
 
 	if r.Strain.PackagingImage == "" {
@@ -268,6 +272,7 @@ func mergeWithExisting(db *sql.DB, r *ImportReview, sourceParents []string) []st
 	r.ExistingBreeder = ex.Breeder
 	s.ID = ex.ID
 	s.SeedCount, s.SeedLocation, s.SeedType, s.PackagingImage = ex.SeedCount, ex.SeedLocation, ex.SeedType, ex.PackagingImage
+	s.Wanted, s.SeedsAddedOn = ex.Wanted, ex.SeedsAddedOn
 	if r.Draft.Provenance.Source == importSourceStraincompass {
 		// StrainCompass's floweringType can only turn the existing
 		// Autoflower setting on, not off.
@@ -363,6 +368,8 @@ func SaveImportedStrainHandler(c *gin.Context) {
 		SeedCount        int                 `json:"seed_count"`
 		SeedLocation     string              `json:"seed_location"`
 		SeedType         string              `json:"seed_type"`
+		Wanted           bool                `json:"wanted"`
+		SeedsAddedOn     string              `json:"seeds_added_on"`
 		CycleTime        int                 `json:"cycle_time"`
 		Url              string              `json:"url"`
 		Growing          *strainGrowingInfo  `json:"growing"`
@@ -524,6 +531,21 @@ func SaveImportedStrainHandler(c *gin.Context) {
 		apiInternalError(c, "api_failed_to_add_strain")
 		return
 	}
+	prevStock := newStrainStock
+	if updated {
+		if prevStock, err = loadStrainStock(tx, strainID); err != nil {
+			fieldLogger.WithError(err).Error("Failed to read existing stock")
+			apiInternalError(c, "api_failed_to_add_strain")
+			return
+		}
+	}
+	stock, err := resolveStrainStock(req.SeedCount, &req.Wanted, &req.SeedsAddedOn, prevStock, stockToday(c))
+	if err != nil {
+		apiBadRequest(c, err.Error())
+		return
+	}
+	cols = append(cols, "wanted", "seeds_added_on")
+	vals = append(vals, stock.Wanted, stock.AddedOn)
 	if updated {
 		err = execUpdateStrain(tx, strainID, cols, vals)
 	} else {

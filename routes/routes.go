@@ -287,6 +287,7 @@ func AddBasicRoutes(r *gin.RouterGroup, version string) {
 	r.GET("/strains/:id", handlers.GetStrainHandler)
 	r.GET("/strains/in-stock", handlers.InStockStrainsHandler)
 	r.GET("/strains/out-of-stock", handlers.OutOfStockStrainsHandler)
+	r.GET("/strains/wanted", handlers.WantedStrainsHandler)
 	r.POST("/decorateImage", utils.DecorateImageHandler)
 	r.GET("/streams", handlers.GetStreamsByZoneHandler)
 
@@ -326,6 +327,7 @@ func AddProtectedApiRoutes(r *gin.RouterGroup) {
 
 	r.PUT("/strains/:id", handlers.UpdateStrainHandler)
 	r.DELETE("/strains/:id", handlers.DeleteStrainHandler)
+	r.POST("/strains/:id/wanted", handlers.SetStrainWantedHandler)
 
 	// CannaDB import (search + one-click import). Auth-gated so anonymous
 	// users can't drive outbound calls against the shared per-IP rate budget.

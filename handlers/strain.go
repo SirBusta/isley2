@@ -311,7 +311,7 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, ''),
 		       coalesce(s.height_indoor, ''), coalesce(s.height_outdoor, ''), coalesce(s.yield_indoor, ''), coalesce(s.yield_outdoor, ''),
 		       coalesce(s.seed_location, ''), coalesce(s.lineage_source, ''), coalesce(s.lineage_source_uri, ''),
-		       coalesce(s.packaging_image, ''), coalesce(s.seed_type, '')
+		       coalesce(s.packaging_image, ''), coalesce(s.seed_type, ''), s.wanted, coalesce(s.seeds_added_on, '')
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		WHERE s.id = $1`, id).Scan(
@@ -320,7 +320,7 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote,
 		&strain.HeightIndoor, &strain.HeightOutdoor, &strain.YieldIndoor, &strain.YieldOutdoor,
 		&strain.SeedLocation, &strain.LineageSource, &strain.LineageSourceURI,
-		&strain.PackagingImage, &strain.SeedType)
+		&strain.PackagingImage, &strain.SeedType, &strain.Wanted, &strain.SeedsAddedOn)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			fieldLogger.Error("Strain not found")
@@ -416,6 +416,8 @@ func AddStrainHandler(c *gin.Context) {
 		Url              string             `json:"url"`
 		SeedLocation     string             `json:"seed_location"`
 		SeedType         string             `json:"seed_type"`
+		Wanted           bool               `json:"wanted"`
+		SeedsAddedOn     string             `json:"seeds_added_on"`
 		Growing          *strainGrowingInfo `json:"growing"`
 	}
 
@@ -432,6 +434,11 @@ func AddStrainHandler(c *gin.Context) {
 	var seedTypeOK bool
 	if req.SeedType, seedTypeOK = normalizeSeedType(req.SeedType); !seedTypeOK {
 		apiBadRequest(c, "api_invalid_seed_type")
+		return
+	}
+	stock, err := resolveStrainStock(req.SeedCount, &req.Wanted, &req.SeedsAddedOn, newStrainStock, stockToday(c))
+	if err != nil {
+		apiBadRequest(c, err.Error())
 		return
 	}
 	var growing strainGrowingInfo
@@ -471,8 +478,9 @@ func AddStrainHandler(c *gin.Context) {
 	// Insert the new strain into the database
 	stmt := `
 		INSERT INTO strain (name, breeder_id, indica, sativa, autoflower, seed_count, description, cycle_time, url, short_desc,
-		                    height_indoor, height_outdoor, yield_indoor, yield_outdoor, seed_location, seed_type)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id
+		                    height_indoor, height_outdoor, yield_indoor, yield_outdoor, seed_location, seed_type,
+		                    wanted, seeds_added_on)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id
 	`
 	//convert autoflower to int
 	var autoflowerInt int
@@ -482,9 +490,9 @@ func AddStrainHandler(c *gin.Context) {
 		autoflowerInt = 0
 	}
 	var id int
-	err := db.QueryRow(stmt, req.Name, breederID, req.Indica, req.Sativa, autoflowerInt, req.SeedCount, req.Description, req.CycleTime, req.Url, req.ShortDescription,
+	err = db.QueryRow(stmt, req.Name, breederID, req.Indica, req.Sativa, autoflowerInt, req.SeedCount, req.Description, req.CycleTime, req.Url, req.ShortDescription,
 		nullableStr(growing.HeightIndoor), nullableStr(growing.HeightOutdoor), nullableStr(growing.YieldIndoor), nullableStr(growing.YieldOutdoor),
-		nullableStr(req.SeedLocation), nullableStr(req.SeedType)).Scan(&id)
+		nullableStr(req.SeedLocation), nullableStr(req.SeedType), stock.Wanted, stock.AddedOn).Scan(&id)
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to insert strain")
 		apiInternalError(c, "api_failed_to_add_strain")
@@ -554,6 +562,8 @@ func UpdateStrainHandler(c *gin.Context) {
 		// Optional blocks: when absent, the stored values are left alone.
 		SeedLocation *string             `json:"seed_location"`
 		SeedType     *string             `json:"seed_type"`
+		Wanted       *bool               `json:"wanted"`
+		SeedsAddedOn *string             `json:"seeds_added_on"`
 		Growing      *strainGrowingInfo  `json:"growing"`
 		Cannabinoids *strainCannabinoids `json:"cannabinoids"`
 		Attributes   *struct {
@@ -661,8 +671,26 @@ func UpdateStrainHandler(c *gin.Context) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	_, err = tx.Exec(updateStmt, req.Name, breederID, req.Indica, req.Sativa,
-		autoflowerInt, req.Description, req.SeedCount, req.CycleTime, req.Url, req.ShortDescription, id)
+	prevStock, err := loadStrainStock(tx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		apiNotFound(c, "api_strain_not_found")
+		return
+	}
+	var stock strainStock
+	if err == nil {
+		stock, err = resolveStrainStock(req.SeedCount, req.Wanted, req.SeedsAddedOn, prevStock, stockToday(c))
+		if errors.Is(err, errInvalidSeedsAddedOn) {
+			apiBadRequest(c, err.Error())
+			return
+		}
+	}
+	if err == nil {
+		_, err = tx.Exec(updateStmt, req.Name, breederID, req.Indica, req.Sativa,
+			autoflowerInt, req.Description, req.SeedCount, req.CycleTime, req.Url, req.ShortDescription, id)
+	}
+	if err == nil {
+		_, err = tx.Exec("UPDATE strain SET wanted = $1, seeds_added_on = $2 WHERE id = $3", stock.Wanted, stock.AddedOn, id)
+	}
 	if err == nil && req.Cannabinoids != nil {
 		cb := req.Cannabinoids
 		_, err = tx.Exec(`UPDATE strain SET thc_min = $1, thc_max = $2, cbd_min = $3, cbd_max = $4, cbn_max = $5, cbg_max = $6 WHERE id = $7`,
@@ -738,30 +766,31 @@ func DeleteStrainHandler(c *gin.Context) {
 	apiOK(c, "api_strain_deleted")
 }
 
-func InStockStrainsHandler(c *gin.Context) {
-	db := DBFromContext(c)
-	strains, err := getStrainsBySeedCount(db, true)
+// The Strains page's three views: seeds on hand, the wish list, and
+// everything else with no seeds.
+const (
+	strainViewInStock    = "s.seed_count > 0"
+	strainViewWanted     = "s.seed_count = 0 AND s.wanted = 1"
+	strainViewOutOfStock = "s.seed_count = 0 AND s.wanted = 0"
+)
+
+func InStockStrainsHandler(c *gin.Context)    { strainViewHandler(c, strainViewInStock) }
+func WantedStrainsHandler(c *gin.Context)     { strainViewHandler(c, strainViewWanted) }
+func OutOfStockStrainsHandler(c *gin.Context) { strainViewHandler(c, strainViewOutOfStock) }
+
+func strainViewHandler(c *gin.Context, where string) {
+	strains, err := getStrainsByView(DBFromContext(c), where)
 	if err != nil {
 		apiInternalError(c, "api_failed_to_fetch_strains")
 		return
 	}
 	c.JSON(http.StatusOK, strains)
 }
-func OutOfStockStrainsHandler(c *gin.Context) {
-	db := DBFromContext(c)
-	strains, err := getStrainsBySeedCount(db, false)
-	if err != nil {
-		apiInternalError(c, "api_failed_to_fetch_strains")
-		return
-	}
-	c.JSON(http.StatusOK, strains)
-}
-func getStrainsBySeedCount(db *sql.DB, inStock bool) ([]types.Strain, error) {
-	fieldLogger := logger.Log.WithField("func", "getStrainsBySeedCount")
-	op := ">"
-	if !inStock {
-		op = "="
-	}
+
+// getStrainsByView lists the strains matching one of the strainView*
+// conditions (constants only — never user input).
+func getStrainsByView(db *sql.DB, where string) ([]types.Strain, error) {
+	fieldLogger := logger.Log.WithField("func", "getStrainsByView")
 	// string_agg is PostgreSQL-only; SQLite uses GROUP_CONCAT.
 	aggExpr := "coalesce(GROUP_CONCAT(sl.parent_name, ', '), '')"
 	if model.IsPostgres() {
@@ -772,14 +801,15 @@ func getStrainsBySeedCount(db *sql.DB, inStock bool) ([]types.Strain, error) {
 		SELECT s.id, s.name, b.name AS breeder, b.id as breeder_id,
 		       s.indica, s.sativa, s.autoflower, s.seed_count, s.description,
 		       coalesce(s.short_desc, ''), coalesce(s.cycle_time, 0), coalesce(s.url, ''),
-		       coalesce(s.seed_location, ''), coalesce(s.seed_type, ''),
+		       coalesce(s.seed_location, ''), coalesce(s.seed_type, ''), s.wanted, coalesce(s.seeds_added_on, ''),
 		       ` + aggExpr + `
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		LEFT JOIN strain_lineage sl ON sl.strain_id = s.id
-		WHERE s.seed_count ` + op + ` 0
+		WHERE ` + where + `
 		GROUP BY s.id, s.name, b.name, b.id, s.indica, s.sativa, s.autoflower,
-		         s.seed_count, s.description, s.short_desc, s.cycle_time, s.url, s.seed_location, s.seed_type
+		         s.seed_count, s.description, s.short_desc, s.cycle_time, s.url, s.seed_location, s.seed_type,
+		         s.wanted, s.seeds_added_on
 		ORDER BY s.name ASC
 	`
 
@@ -796,7 +826,7 @@ func getStrainsBySeedCount(db *sql.DB, inStock bool) ([]types.Strain, error) {
 		if err := rows.Scan(&strain.ID, &strain.Name, &strain.Breeder, &strain.BreederID,
 			&strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount,
 			&strain.Description, &strain.ShortDescription, &strain.CycleTime, &strain.Url,
-			&strain.SeedLocation, &strain.SeedType, &strain.Lineage); err != nil {
+			&strain.SeedLocation, &strain.SeedType, &strain.Wanted, &strain.SeedsAddedOn, &strain.Lineage); err != nil {
 			fieldLogger.WithError(err).Error("Failed to scan strain")
 			return nil, err
 		}

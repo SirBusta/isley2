@@ -14,6 +14,9 @@
                 <button class="btn btn-sm view-button active" data-view="in-stock">
                     <i class="fa-solid fa-seedling me-1"></i> {{ .lcl.in_stock }}
                 </button>
+                <button class="btn btn-sm view-button" data-view="wanted">
+                    <i class="fa-solid fa-star me-1"></i> {{ .lcl.wanted }}
+                </button>
                 <button class="btn btn-sm view-button" data-view="out-of-stock">
                     <i class="fa-solid fa-box-open me-1"></i> {{ .lcl.out_stock }}
                 </button>
@@ -78,6 +81,8 @@
                     <option value="sativa-desc">{{ .lcl.sort_most_sativa }}</option>
                     <option value="seeds-desc">{{ .lcl.sort_most_seeds }}</option>
                     <option value="seeds-asc">{{ .lcl.sort_fewest_seeds }}</option>
+                    <option value="added-asc">{{ .lcl.sort_oldest_seeds }}</option>
+                    <option value="added-desc">{{ .lcl.sort_newest_seeds }}</option>
                 </select>
             </div>
             <div class="strains-filter-group">
@@ -106,6 +111,7 @@
                     <th class="st-th-type">Type</th>
                     <th class="st-th-ratio st-sortable" data-sort="indica">Indica/Sativa <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
                     <th class="st-th-seeds st-sortable" data-sort="seeds">Seeds <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
+                    <th class="st-th-added st-sortable" data-sort="added">{{ .lcl.seeds_added_on }} <i class="fa-solid fa-sort ms-1 text-muted"></i></th>
                 </tr>
             </thead>
             <tbody id="strainsTableBody">
@@ -143,7 +149,36 @@ document.addEventListener("DOMContentLoaded", () => {
         noMatch: "{{ .lcl.strains_no_match }}",
         noneInStock: "{{ .lcl.strains_none_in_stock }}",
         seedLocation: "{{ .lcl.seed_location }}",
+        noneWanted: "{{ .lcl.strains_none_wanted }}",
+        wanted: "{{ .lcl.wanted }}",
+        addedOn: "{{ .lcl.seeds_added_on }}",
+        ageNew: "{{ .lcl.seed_age_new }}",
+        ageMonths: "{{ .lcl.seed_age_months }}",
+        ageYears: "{{ .lcl.seed_age_years }}",
     };
+
+    // How long seeds have been in stock, from "YYYY-MM-DD" (same rules as
+    // the strain page's seedAge): "less than a month", "7 mo", "2 yr 3 mo".
+    function seedAge(added) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(added || "");
+        if (!m) return "";
+        const now = new Date();
+        let months = (now.getFullYear() - +m[1]) * 12 + (now.getMonth() + 1 - +m[2]);
+        if (now.getDate() < +m[3]) months--;
+        months = Math.max(0, months);
+        if (months < 1) return lcl.ageNew;
+        if (months < 24) return lcl.ageMonths.replace("%d", months);
+        return lcl.ageYears.replace("%d", Math.floor(months / 12)).replace("%d", months % 12);
+    }
+
+    function stockInfo(s) {
+        if (s.seed_count > 0) {
+            return s.seeds_added_on
+                ? `<small class="text-muted sc-seed-age" title="${esc(lcl.addedOn)}: ${esc(s.seeds_added_on)}"><i class="fa-regular fa-calendar me-1"></i>${esc(seedAge(s.seeds_added_on))}</small>`
+                : "";
+        }
+        return s.wanted ? `<span class="badge bg-warning text-dark"><i class="fa-solid fa-star me-1"></i>${esc(lcl.wanted)}</span>` : "";
+    }
 
     let currentView = "in-stock";
     let currentLayout = localStorage.getItem("strainsLayout") || "cards";
@@ -165,7 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // ----- Fetch strains -----
     async function fetchStrains(view) {
         cardsContainer.innerHTML = `<div class="text-center py-5" style="flex-basis:100%"><div class="spinner-border text-primary" role="status"></div></div>`;
-        tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
+        tableBody.innerHTML = `<tr><td colspan="7" class="text-center py-4"><div class="spinner-border text-primary" role="status"></div></td></tr>`;
         try {
             // no-store: on Back navigation the browser otherwise replays a stale cached list.
             const res = await fetch(`/strains/${view}`, { cache: "no-store" });
@@ -174,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
             applyFilters();
         } catch (e) {
             cardsContainer.innerHTML = `<p class="text-danger text-center" style="flex-basis:100%">Failed to load strains.</p>`;
-            tableBody.innerHTML = `<tr><td colspan="6" class="text-danger text-center">Failed to load strains.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="7" class="text-danger text-center">Failed to load strains.</td></tr>`;
         }
     }
 
@@ -245,6 +280,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     return asc ? a.sativa - b.sativa : b.sativa - a.sativa;
                 case "seeds":
                     return asc ? a.seed_count - b.seed_count : b.seed_count - a.seed_count;
+                case "added":
+                    // Strains with no date (unknown, or out of stock) go last either way.
+                    va = a.seed_count > 0 ? (a.seeds_added_on || "") : "";
+                    vb = b.seed_count > 0 ? (b.seeds_added_on || "") : "";
+                    if (!va || !vb) return (va ? 0 : 1) - (vb ? 0 : 1);
+                    return asc ? va.localeCompare(vb) : vb.localeCompare(va);
                 default:
                     return 0;
             }
@@ -256,7 +297,8 @@ document.addEventListener("DOMContentLoaded", () => {
             cardsContainer.innerHTML = "";
             tableBody.innerHTML = "";
             const inStockEmpty = currentView === "in-stock" && allStrains.length === 0;
-            emptyStateText.textContent = inStockEmpty ? lcl.noneInStock : lcl.noMatch;
+            const wantedEmpty = currentView === "wanted" && allStrains.length === 0;
+            emptyStateText.textContent = inStockEmpty ? lcl.noneInStock : wantedEmpty ? lcl.noneWanted : lcl.noMatch;
             emptyShowOutOfStock.style.display = inStockEmpty ? "" : "none";
             emptyState.style.display = "flex";
             return;
@@ -278,7 +320,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const seedBadge = (s.seed_count > 0
                 ? `<span class="badge bg-success">${s.seed_count}</span>`
                 : `<span class="badge bg-secondary">0</span>`) +
-                (s.seed_location ? ` <small class="text-muted sc-seed-location" title="${esc(lcl.seedLocation)}"><i class="fa-solid fa-box-archive me-1"></i>${esc(s.seed_location)}</small>` : "");
+                (s.seed_location ? ` <small class="text-muted sc-seed-location" title="${esc(lcl.seedLocation)}"><i class="fa-solid fa-box-archive me-1"></i>${esc(s.seed_location)}</small>` : "") +
+                (stockInfo(s) ? ` ${stockInfo(s)}` : "");
 
             const lineageHtml = s.lineage
                 ? `<div class="sc-lineage"><i class="fa-solid fa-sitemap me-1"></i>${esc(s.lineage)}</div>`
@@ -333,7 +376,8 @@ document.addEventListener("DOMContentLoaded", () => {
             const seedBadge = (s.seed_count > 0
                 ? `<span class="badge bg-success">${s.seed_count}</span>`
                 : `<span class="badge bg-secondary">0</span>`) +
-                (s.seed_location ? `<div class="small text-muted">${esc(s.seed_location)}</div>` : "");
+                (s.seed_location ? `<div class="small text-muted">${esc(s.seed_location)}</div>` : "") +
+                (stockInfo(s) ? `<div class="small">${stockInfo(s)}</div>` : "");
 
             const extLink = s.url
                 ? ` <a href="${esc(s.url)}" target="_blank" class="text-muted" style="font-size:0.75rem"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>`
@@ -356,6 +400,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
                 </td>
                 <td class="text-center">${seedBadge}</td>
+                <td class="text-nowrap small">${s.seed_count > 0 && s.seeds_added_on ? esc(s.seeds_added_on) : '<span class="text-muted">—</span>'}</td>
             </tr>`;
         }).join("");
     }
@@ -434,6 +479,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 "breeder": tableSort.asc ? "breeder-asc" : null,
                 "indica": tableSort.asc ? null : "indica-desc",
                 "seeds": tableSort.asc ? "seeds-asc" : "seeds-desc",
+                "added": tableSort.asc ? "added-asc" : "added-desc",
             }[sortKey];
             if (mappedSort && sortBy.querySelector(`option[value="${mappedSort}"]`)) {
                 sortBy.value = mappedSort;

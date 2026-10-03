@@ -98,7 +98,7 @@ func TestGetStrain_MissingIDReturnsZeroValue(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // In-stock / out-of-stock filtering (handlers.InStockStrainsHandler /
-// OutOfStockStrainsHandler delegate to getStrainsBySeedCount which is
+// OutOfStockStrainsHandler delegate to getStrainsByView which is
 // unexported — exercise them through the public handlers via a JSON
 // round-trip in tests/integration/strain_test.go. The DB-level filter
 // is verified directly here using GetStrains plus a manual where-clause

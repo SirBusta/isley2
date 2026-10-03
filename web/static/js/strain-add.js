@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const descriptionTextarea = document.getElementById("editStrainDescription");
     const markdownPreview = document.getElementById("markdownPreview");
 
+    const stockFields = window.strainStockFields ? window.strainStockFields() : null;
     const breederAc = IsleyAutocomplete.breederPicker(editBreederSelect, editNewBreederName);
 
     // "Flowering Time" for photoperiods, "Seed to Harvest" for autoflowers.
@@ -94,6 +95,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 seed_count: parseInt(document.getElementById("editSeedCount").value, 10),
                 seed_location: document.getElementById("editSeedLocation").value,
                 seed_type: document.getElementById("editSeedType").value,
+                ...(stockFields ? stockFields.collect() : {}),
                 description: descriptionTextarea.value,
                 short_desc: document.getElementById("editStrainShortDescription").value,
                 // Entered in weeks, stored as days (the harvest-date math uses days).
