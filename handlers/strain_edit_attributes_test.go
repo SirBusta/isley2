@@ -5,6 +5,8 @@ package handlers_test
 
 import (
 	"database/sql"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"testing"
@@ -155,6 +157,66 @@ func TestStrainEdit_SeedLocation(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, e.put(t, map[string]any{"seed_location": ""}))
 	assert.False(t, loc().Valid, "blank clears it")
+}
+
+func TestStrainEdit_SeedType(t *testing.T) {
+	t.Parallel()
+	e := newStrainEditEnv(t)
+	seedType := func() sql.NullString {
+		var s sql.NullString
+		require.NoError(t, e.db.QueryRow("SELECT seed_type FROM strain WHERE id = $1", e.strainID).Scan(&s))
+		return s
+	}
+	page := func(path string) string {
+		resp := e.client.Get(path)
+		defer testutil.DrainAndClose(resp)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		return string(body)
+	}
+
+	assert.False(t, seedType().Valid, "not set by default")
+	assert.Regexp(t, `<option value="" selected>Not set`, page("/strain/"+strconv.Itoa(e.strainID)+"/edit"))
+
+	require.Equal(t, http.StatusOK, e.put(t, map[string]any{"seed_type": " Feminized "}))
+	assert.Equal(t, "feminized", seedType().String, "trimmed and lower-cased")
+	assert.Regexp(t, `<option value="feminized" selected>`, page("/strain/"+strconv.Itoa(e.strainID)+"/edit"))
+	assert.Contains(t, page("/strain/"+strconv.Itoa(e.strainID)), "Feminized Seed", "shown on the strain page")
+
+	require.Equal(t, http.StatusOK, e.put(t, nil))
+	assert.Equal(t, "feminized", seedType().String, "omitted = unchanged")
+
+	assert.Equal(t, http.StatusBadRequest, e.put(t, map[string]any{"seed_type": "autoflower"}))
+	assert.Equal(t, "feminized", seedType().String)
+
+	require.Equal(t, http.StatusOK, e.put(t, map[string]any{"seed_type": ""}))
+	assert.False(t, seedType().Valid, "blank clears it")
+}
+
+func TestStrainAdd_SeedType(t *testing.T) {
+	t.Parallel()
+	e := newStrainEditEnv(t)
+	add := func(seedType string) (int, int) {
+		resp := e.client.SessionPostJSON(t, "/strains", e.token, map[string]any{
+			"name": "New " + seedType, "breeder_id": e.breeder, "indica": 50, "sativa": 50,
+			"cycle_time": 56, "short_desc": "x", "seed_type": seedType,
+		})
+		defer testutil.DrainAndClose(resp)
+		var out struct {
+			ID int `json:"id"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out.ID
+	}
+
+	status, id := add("clone")
+	require.Equal(t, http.StatusCreated, status)
+	var got sql.NullString
+	require.NoError(t, e.db.QueryRow("SELECT seed_type FROM strain WHERE id = $1", id).Scan(&got))
+	assert.Equal(t, "clone", got.String)
+
+	status, _ = add("autoflower")
+	assert.Equal(t, http.StatusBadRequest, status)
 }
 
 func TestStrainEdit_RejectsBadCannabinoids(t *testing.T) {

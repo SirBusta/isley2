@@ -163,6 +163,12 @@
                                 {{ end }}
                             </span>
                         </li>
+                        {{ with .strain.SeedType }}
+                        <li>
+                            <span class="strain-info-label"><i class="fa-solid fa-tag me-2"></i>{{ $.lcl.seed_type }}</span>
+                            <span class="strain-info-value">{{ if eq . "feminized" }}{{ $.lcl.seed_type_feminized }}{{ else if eq . "regular" }}{{ $.lcl.seed_type_regular }}{{ else if eq . "clone" }}{{ $.lcl.seed_type_clone }}{{ end }}</span>
+                        </li>
+                        {{ end }}
                         <li>
                             <span class="strain-info-label"><i class="fa-solid fa-seedling me-2"></i>{{ .lcl.seed_count }}</span>
                             <span class="strain-info-value">

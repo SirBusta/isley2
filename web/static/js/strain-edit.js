@@ -253,6 +253,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 autoflower: document.getElementById("editAutoflower").value === "true",
                 seed_count: parseInt(document.getElementById("editSeedCount").value, 10),
                 seed_location: document.getElementById("editSeedLocation").value,
+                seed_type: document.getElementById("editSeedType").value,
                 description: descriptionTextarea.value,
                 short_desc: document.getElementById("editStrainShortDescription").value,
                 // Entered in weeks, stored as days (the harvest-date math uses days).

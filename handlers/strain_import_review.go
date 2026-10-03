@@ -267,7 +267,7 @@ func mergeWithExisting(db *sql.DB, r *ImportReview, sourceParents []string) []st
 	s := &r.Strain
 	r.ExistingBreeder = ex.Breeder
 	s.ID = ex.ID
-	s.SeedCount, s.SeedLocation, s.PackagingImage = ex.SeedCount, ex.SeedLocation, ex.PackagingImage
+	s.SeedCount, s.SeedLocation, s.SeedType, s.PackagingImage = ex.SeedCount, ex.SeedLocation, ex.SeedType, ex.PackagingImage
 	if r.Draft.Provenance.Source == importSourceStraincompass {
 		// StrainCompass's floweringType can only turn the existing
 		// Autoflower setting on, not off.
@@ -362,6 +362,7 @@ func SaveImportedStrainHandler(c *gin.Context) {
 		ShortDescription string              `json:"short_desc"`
 		SeedCount        int                 `json:"seed_count"`
 		SeedLocation     string              `json:"seed_location"`
+		SeedType         string              `json:"seed_type"`
 		CycleTime        int                 `json:"cycle_time"`
 		Url              string              `json:"url"`
 		Growing          *strainGrowingInfo  `json:"growing"`
@@ -416,6 +417,11 @@ func SaveImportedStrainHandler(c *gin.Context) {
 	req.SeedLocation = strings.TrimSpace(req.SeedLocation)
 	if err := utils.ValidateStringLength("seed_location", req.SeedLocation, utils.MaxNameLength); err != nil {
 		apiBadRequest(c, err.Error())
+		return
+	}
+	var seedTypeOK bool
+	if req.SeedType, seedTypeOK = normalizeSeedType(req.SeedType); !seedTypeOK {
+		apiBadRequest(c, "api_invalid_seed_type")
 		return
 	}
 	var growing strainGrowingInfo
@@ -476,12 +482,12 @@ func SaveImportedStrainHandler(c *gin.Context) {
 	if req.Autoflower {
 		autoflower = 1
 	}
-	cols := []string{"name", "breeder_id", "indica", "sativa", "autoflower", "seed_count", "seed_location",
+	cols := []string{"name", "breeder_id", "indica", "sativa", "autoflower", "seed_count", "seed_location", "seed_type",
 		"description", "short_desc", "cycle_time", "url",
 		"height_indoor", "height_outdoor", "yield_indoor", "yield_outdoor",
 		"thc_min", "thc_max", "cbd_min", "cbd_max", "cbn_max", "cbg_max",
 		"lineage_source", "lineage_source_uri", keyCol}
-	vals := []any{req.Name, breederID, req.Indica, req.Sativa, autoflower, req.SeedCount, nullableStr(req.SeedLocation),
+	vals := []any{req.Name, breederID, req.Indica, req.Sativa, autoflower, req.SeedCount, nullableStr(req.SeedLocation), nullableStr(req.SeedType),
 		req.Description, req.ShortDescription, req.CycleTime, req.Url,
 		nullableStr(growing.HeightIndoor), nullableStr(growing.HeightOutdoor), nullableStr(growing.YieldIndoor), nullableStr(growing.YieldOutdoor),
 		cb.ThcMin, cb.ThcMax, cb.CbdMin, cb.CbdMax, cb.CbnMax, cb.CbgMax,

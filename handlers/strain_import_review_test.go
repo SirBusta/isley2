@@ -111,8 +111,8 @@ func TestImportReview_ExistingStrainKeepsUserValues(t *testing.T) {
 	t.Parallel()
 	s := newImportServer(t)
 	breeder := testutil.SeedBreeder(t, s.db, "Seed Supreme")
-	testutil.MustExec(t, s.db, `INSERT INTO strain (name, breeder_id, sativa, indica, autoflower, description, seed_count, seed_location, straincompass_slug)
-		VALUES ('Blue Dream', $1, 50, 50, 1, 'old', 7, 'Jar 2', 'blue-dream')`, breeder)
+	testutil.MustExec(t, s.db, `INSERT INTO strain (name, breeder_id, sativa, indica, autoflower, description, seed_count, seed_location, seed_type, straincompass_slug)
+		VALUES ('Blue Dream', $1, 50, 50, 1, 'old', 7, 'Jar 2', 'clone', 'blue-dream')`, breeder)
 	var id int
 	require.NoError(t, s.db.QueryRow("SELECT id FROM strain WHERE straincompass_slug = 'blue-dream'").Scan(&id))
 	testutil.MustExec(t, s.db, "INSERT INTO strain_lineage (strain_id, parent_name) VALUES ($1, 'My Own Parent')", id)
@@ -121,6 +121,7 @@ func TestImportReview_ExistingStrainKeepsUserValues(t *testing.T) {
 	assert.Contains(t, page, `href="/strain/`+strconv.Itoa(id)+`"`, "links the strain it will update")
 	assert.Regexp(t, `id="editSeedCount"[^>]*value="7"`, page)
 	assert.Regexp(t, `id="editSeedLocation"[^>]*value="Jar 2"`, page)
+	assert.Regexp(t, `<option value="clone" selected>`, page, "the user's seed type is kept")
 	assert.Regexp(t, `<option value="true" selected`, page, "StrainCompass doesn't say AUTOFLOWER for Blue Dream, so the user's Yes is kept")
 	d := parseDraft(t, page)
 	require.Len(t, d.Parents, 1)
@@ -158,7 +159,7 @@ func TestImportReview_Errors(t *testing.T) {
 func reviewSavePayload(overrides map[string]any) map[string]any {
 	p := map[string]any{
 		"name": "Blue Dream (mine)", "breeder_id": nil, "new_breeder": "Seed Supreme",
-		"indica": 40, "sativa": 60, "autoflower": false, "seed_count": 5, "seed_location": "Jar 1",
+		"indica": 40, "sativa": 60, "autoflower": false, "seed_count": 5, "seed_location": "Jar 1", "seed_type": "regular",
 		"description": "desc", "short_desc": "short", "cycle_time": 63, "url": "",
 		"growing":      map[string]any{"height_indoor": "90-150cm"},
 		"cannabinoids": map[string]any{"thc_max": 24},
@@ -198,14 +199,15 @@ func TestImportSave_AddsThenUpdates(t *testing.T) {
 	require.Equal(t, http.StatusOK, status)
 	assert.False(t, first.Updated)
 
-	var name, slug, source, loc, note, height sql.NullString
+	var name, slug, source, loc, seedType, note, height sql.NullString
 	var thc sql.NullFloat64
-	require.NoError(t, s.db.QueryRow(`SELECT name, straincompass_slug, lineage_source, seed_location, straincompass_lineage_note, height_indoor, thc_max
-		FROM strain WHERE id = $1`, first.ID).Scan(&name, &slug, &source, &loc, &note, &height, &thc))
+	require.NoError(t, s.db.QueryRow(`SELECT name, straincompass_slug, lineage_source, seed_location, seed_type, straincompass_lineage_note, height_indoor, thc_max
+		FROM strain WHERE id = $1`, first.ID).Scan(&name, &slug, &source, &loc, &seedType, &note, &height, &thc))
 	assert.Equal(t, "Blue Dream (mine)", name.String, "the user's edits are what gets saved")
 	assert.Equal(t, "blue-dream", slug.String)
 	assert.Equal(t, "straincompass", source.String)
 	assert.Equal(t, "Jar 1", loc.String)
+	assert.Equal(t, "regular", seedType.String)
 	assert.Equal(t, "Blueberry x Haze", note.String)
 	assert.Equal(t, "90-150cm", height.String)
 	assert.Equal(t, 24.0, thc.Float64)

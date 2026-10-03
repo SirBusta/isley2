@@ -245,6 +245,7 @@ type Strain struct {
 	Description      string `json:"description"`
 	SeedCount        int    `json:"seed_count"`
 	SeedLocation     string `json:"seed_location,omitempty"` // where the seeds are kept, e.g. "Jar 1"
+	SeedType         string `json:"seed_type,omitempty"`     // "clone", "feminized", "regular", or "" (not set)
 	CycleTime        int    `json:"cycle_time"`
 	Url              string `json:"url"`
 	ShortDescription string `json:"short_desc"`
