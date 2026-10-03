@@ -61,3 +61,8 @@ Dockerfile              text eol=lf
 *.db        binary
 *.sqlite    binary
 *.sqlite3   binary
+
+# Third-party front-end libraries (Bootstrap, Font Awesome, Video.js,
+# Chart.js, exif-js), bundled so pages never load anything from other sites.
+# Upstream minified files, not project source.
+web/static/vendor/**    linguist-vendored
