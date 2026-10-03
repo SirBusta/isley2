@@ -100,6 +100,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 short_desc: document.getElementById("editStrainShortDescription").value,
                 // Entered in weeks, stored as days (the harvest-date math uses days).
                 cycle_time: Math.round((parseFloat(document.getElementById("editCycleTime").value) || 0) * 7),
+                // Optional short end of a range ("8 – 10 weeks"); blank = a single value.
+                cycle_time_min: Math.round((parseFloat(document.getElementById("editCycleTimeMin").value) || 0) * 7),
                 url: document.getElementById("editUrl").value,
                 growing: {
                     height_indoor: document.getElementById("editHeightIndoor").value,

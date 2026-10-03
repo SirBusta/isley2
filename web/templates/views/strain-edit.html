@@ -151,7 +151,11 @@
                                 <label for="editCycleTime" class="form-label required" id="editCycleTimeLabel"
                                        data-photo="{{ .lcl.flowering_time }}" data-auto="{{ .lcl.seed_to_harvest }}">{{ if .strain.Autoflower }}{{ .lcl.seed_to_harvest }}{{ else }}{{ .lcl.flowering_time }}{{ end }}</label>
                                 <div class="input-group">
-                                    <input type="number" class="form-control" id="editCycleTime" min="0" step="0.5" value="{{ daysToWeeks .strain.CycleTime }}" required>
+                                    <input type="number" class="form-control" id="editCycleTimeMin" min="0" step="any" value="{{ if gt .strain.CycleTimeMin 0 }}{{ daysToWeeks .strain.CycleTimeMin }}{{ end }}"
+                                           placeholder="{{ .lcl.cycle_time_from }}" aria-label="{{ .lcl.cycle_time_from }}">
+                                    <span class="input-group-text">–</span>
+                                    <input type="number" class="form-control" id="editCycleTime" min="0" step="any" value="{{ daysToWeeks .strain.CycleTime }}" required
+                                           placeholder="{{ .lcl.cycle_time_to }}" aria-label="{{ .lcl.cycle_time_to }}">
                                     <span class="input-group-text">{{ .lcl.unit_weeks }}</span>
                                 </div>
                                 <small class="text-muted" id="editCycleTimeDesc"
@@ -297,26 +301,26 @@
                             <div class="col-sm-6">
                                 <label class="form-label" for="editThcMin">THC %</label>
                                 <div class="input-group">
-                                    <input type="number" class="form-control" id="editThcMin" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_min }}" value="{{ with .strain.ThcMin }}{{ . }}{{ end }}">
+                                    <input type="number" class="form-control" id="editThcMin" min="0" max="100" step="any" placeholder="{{ .lcl.cannabinoid_min }}" value="{{ with .strain.ThcMin }}{{ . }}{{ end }}">
                                     <span class="input-group-text">–</span>
-                                    <input type="number" class="form-control" id="editThcMax" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_max }}" value="{{ with .strain.ThcMax }}{{ . }}{{ end }}" aria-label="THC {{ .lcl.cannabinoid_max }}">
+                                    <input type="number" class="form-control" id="editThcMax" min="0" max="100" step="any" placeholder="{{ .lcl.cannabinoid_max }}" value="{{ with .strain.ThcMax }}{{ . }}{{ end }}" aria-label="THC {{ .lcl.cannabinoid_max }}">
                                 </div>
                             </div>
                             <div class="col-sm-6">
                                 <label class="form-label" for="editCbdMin">CBD %</label>
                                 <div class="input-group">
-                                    <input type="number" class="form-control" id="editCbdMin" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_min }}" value="{{ with .strain.CbdMin }}{{ . }}{{ end }}">
+                                    <input type="number" class="form-control" id="editCbdMin" min="0" max="100" step="any" placeholder="{{ .lcl.cannabinoid_min }}" value="{{ with .strain.CbdMin }}{{ . }}{{ end }}">
                                     <span class="input-group-text">–</span>
-                                    <input type="number" class="form-control" id="editCbdMax" min="0" max="100" step="0.1" placeholder="{{ .lcl.cannabinoid_max }}" value="{{ with .strain.CbdMax }}{{ . }}{{ end }}" aria-label="CBD {{ .lcl.cannabinoid_max }}">
+                                    <input type="number" class="form-control" id="editCbdMax" min="0" max="100" step="any" placeholder="{{ .lcl.cannabinoid_max }}" value="{{ with .strain.CbdMax }}{{ . }}{{ end }}" aria-label="CBD {{ .lcl.cannabinoid_max }}">
                                 </div>
                             </div>
                             <div class="col-6 col-sm-3">
                                 <label class="form-label" for="editCbnMax">CBN % ({{ .lcl.cannabinoid_max }})</label>
-                                <input type="number" class="form-control" id="editCbnMax" min="0" max="100" step="0.1" value="{{ with .strain.CbnMax }}{{ . }}{{ end }}">
+                                <input type="number" class="form-control" id="editCbnMax" min="0" max="100" step="any" value="{{ with .strain.CbnMax }}{{ . }}{{ end }}">
                             </div>
                             <div class="col-6 col-sm-3">
                                 <label class="form-label" for="editCbgMax">CBG % ({{ .lcl.cannabinoid_max }})</label>
-                                <input type="number" class="form-control" id="editCbgMax" min="0" max="100" step="0.1" value="{{ with .strain.CbgMax }}{{ . }}{{ end }}">
+                                <input type="number" class="form-control" id="editCbgMax" min="0" max="100" step="any" value="{{ with .strain.CbgMax }}{{ . }}{{ end }}">
                             </div>
                         </div>
                         <small class="text-muted d-block mt-2">{{ .lcl.strain_edit_cannabinoids_help }}</small>

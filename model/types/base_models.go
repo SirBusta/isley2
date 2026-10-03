@@ -248,7 +248,8 @@ type Strain struct {
 	SeedType         string `json:"seed_type,omitempty"`     // "clone", "feminized", "regular", or "" (not set)
 	Wanted           bool   `json:"wanted"`                  // on the wish list (only while seed_count is 0)
 	SeedsAddedOn     string `json:"seeds_added_on,omitempty"` // "2006-01-02" the current seeds were stocked; "" if unknown
-	CycleTime        int    `json:"cycle_time"`
+	CycleTime        int    `json:"cycle_time"`               // days; the long end of a range
+	CycleTimeMin     int    `json:"cycle_time_min,omitempty"` // days; short end of a range, 0 = single value
 	Url              string `json:"url"`
 	ShortDescription string `json:"short_desc"`
 	Lineage          string `json:"lineage,omitempty"`

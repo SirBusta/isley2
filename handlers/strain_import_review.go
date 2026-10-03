@@ -288,7 +288,7 @@ func mergeWithExisting(db *sql.DB, r *ImportReview, sourceParents []string) []st
 		s.ShortDescription = ex.ShortDescription
 	}
 	if s.CycleTime == 0 {
-		s.CycleTime = ex.CycleTime
+		s.CycleTime, s.CycleTimeMin = ex.CycleTime, ex.CycleTimeMin
 	}
 	for _, p := range []struct{ dst, src **float64 }{
 		{&s.ThcMin, &ex.ThcMin}, {&s.ThcMax, &ex.ThcMax}, {&s.CbdMin, &ex.CbdMin},
@@ -371,6 +371,7 @@ func SaveImportedStrainHandler(c *gin.Context) {
 		Wanted           bool                `json:"wanted"`
 		SeedsAddedOn     string              `json:"seeds_added_on"`
 		CycleTime        int                 `json:"cycle_time"`
+		CycleTimeMin     int                 `json:"cycle_time_min"`
 		Url              string              `json:"url"`
 		Growing          *strainGrowingInfo  `json:"growing"`
 		Cannabinoids     *strainCannabinoids `json:"cannabinoids"`
@@ -419,6 +420,11 @@ func SaveImportedStrainHandler(c *gin.Context) {
 	}
 	if req.Indica+req.Sativa != 100 {
 		apiBadRequest(c, "api_indica_sativa_must_sum_100")
+		return
+	}
+	cycleTimeMin, ok := normalizeCycleTimeMin(req.CycleTimeMin, req.CycleTime)
+	if !ok {
+		apiBadRequest(c, "api_cycle_time_min_invalid")
 		return
 	}
 	req.SeedLocation = strings.TrimSpace(req.SeedLocation)
@@ -490,12 +496,12 @@ func SaveImportedStrainHandler(c *gin.Context) {
 		autoflower = 1
 	}
 	cols := []string{"name", "breeder_id", "indica", "sativa", "autoflower", "seed_count", "seed_location", "seed_type",
-		"description", "short_desc", "cycle_time", "url",
+		"description", "short_desc", "cycle_time", "cycle_time_min", "url",
 		"height_indoor", "height_outdoor", "yield_indoor", "yield_outdoor",
 		"thc_min", "thc_max", "cbd_min", "cbd_max", "cbn_max", "cbg_max",
 		"lineage_source", "lineage_source_uri", keyCol}
 	vals := []any{req.Name, breederID, req.Indica, req.Sativa, autoflower, req.SeedCount, nullableStr(req.SeedLocation), nullableStr(req.SeedType),
-		req.Description, req.ShortDescription, req.CycleTime, req.Url,
+		req.Description, req.ShortDescription, req.CycleTime, cycleTimeMin, req.Url,
 		nullableStr(growing.HeightIndoor), nullableStr(growing.HeightOutdoor), nullableStr(growing.YieldIndoor), nullableStr(growing.YieldOutdoor),
 		cb.ThcMin, cb.ThcMax, cb.CbdMin, cb.CbdMax, cb.CbnMax, cb.CbgMax,
 		nullableStr(lineageSource), nullableStr(lineageURI), prov.Key}

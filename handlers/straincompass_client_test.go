@@ -100,11 +100,19 @@ func TestMapStraincompassStrain(t *testing.T) {
 		if s.CycleTime != 63 {
 			t.Fatalf("cycleTime = %d, want 63 (9 weeks max -> days)", s.CycleTime)
 		}
+		if s.CycleTimeMin != 56 {
+			t.Fatalf("cycleTimeMin = %d, want 56 (8 weeks min kept as the range's short end)", s.CycleTimeMin)
+		}
 
 		rec2 := &straincompassStrain{Name: "X", FloweringTimeMin: intPtr(10)}
 		s2 := mapStraincompassStrain(rec2)
-		if s2.CycleTime != 70 {
-			t.Fatalf("cycleTime = %d, want 70 (10 weeks min fallback -> days)", s2.CycleTime)
+		if s2.CycleTime != 70 || s2.CycleTimeMin != 0 {
+			t.Fatalf("cycleTime = %d/%d, want 70/0 (10 weeks min fallback -> days, no range)", s2.CycleTime, s2.CycleTimeMin)
+		}
+
+		s3 := mapStraincompassStrain(&straincompassStrain{Name: "X", FloweringTimeMin: intPtr(9), FloweringTimeMax: intPtr(9)})
+		if s3.CycleTime != 63 || s3.CycleTimeMin != 0 {
+			t.Fatalf("9-9 weeks: got %d/%d, want 63/0 (equal ends are a single value)", s3.CycleTime, s3.CycleTimeMin)
 		}
 	})
 

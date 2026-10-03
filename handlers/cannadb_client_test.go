@@ -62,8 +62,8 @@ func TestMapCannadbStrain(t *testing.T) {
 		if s.Sativa != 40 || s.Indica != 60 {
 			t.Fatalf("indica/sativa = %d/%d, want 60/40", s.Indica, s.Sativa)
 		}
-		if s.CycleTime != 63 {
-			t.Fatalf("cycleTime = %d, want 63 (max)", s.CycleTime)
+		if s.CycleTime != 63 || s.CycleTimeMin != 56 {
+			t.Fatalf("cycleTime = %d/%d, want 63/56 (max, with min kept)", s.CycleTime, s.CycleTimeMin)
 		}
 		if !s.Autoflower || s.Description != "# markdown" || s.Url != "https://breeder.example/wc" {
 			t.Fatalf("unexpected mapped fields: %+v", s)

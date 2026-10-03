@@ -289,6 +289,42 @@ func GetStrains(db *sql.DB) []types.Strain {
 	return strains
 }
 
+// cycleTimeRange turns a {min, max} range (scaled by unit, e.g. 7 for
+// weeks) into the stored long end and the short end (0 when there's no
+// range). The long end falls back to min when max is missing.
+func cycleTimeRange(minP, maxP *int, unit int) (cycleTime, cycleTimeMin int) {
+	if maxP != nil && *maxP > 0 {
+		cycleTime = *maxP * unit
+	} else if minP != nil && *minP > 0 {
+		return *minP * unit, 0
+	}
+	if minP != nil && *minP > 0 && *minP*unit < cycleTime {
+		cycleTimeMin = *minP * unit
+	}
+	return cycleTime, cycleTimeMin
+}
+
+// normalizeCycleTimeMin returns what to store for the short end of a
+// flowering-time range (days): the value when 0 < min < max, otherwise NULL
+// (a single value). ok is false when min is negative or longer than max.
+func normalizeCycleTimeMin(min, max int) (any, bool) {
+	if min < 0 || (max > 0 && min > max) {
+		return nil, false
+	}
+	if min > 0 && min < max {
+		return min, true
+	}
+	return nil, true
+}
+
+// nullableInt stores 0 as NULL.
+func nullableInt(v int) any {
+	if v == 0 {
+		return nil
+	}
+	return v
+}
+
 // seedTypes are the stored values of strain.seed_type; "" means not set.
 var seedTypes = map[string]bool{"": true, "clone": true, "feminized": true, "regular": true}
 
@@ -306,7 +342,7 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 	var straincompassVerified sql.NullBool
 	//join in breeder name
 	err := db.QueryRow(`
-		SELECT s.id, s.name, coalesce(s.short_desc, ''), b.name AS breeder, b.id as breeder_id, s.indica, s.sativa, s.autoflower, s.seed_count, s.description, coalesce(s.cycle_time, 0), coalesce(s.url, ''), coalesce(s.cannadb_uri, ''),
+		SELECT s.id, s.name, coalesce(s.short_desc, ''), b.name AS breeder, b.id as breeder_id, s.indica, s.sativa, s.autoflower, s.seed_count, s.description, coalesce(s.cycle_time, 0), coalesce(s.cycle_time_min, 0), coalesce(s.url, ''), coalesce(s.cannadb_uri, ''),
 		       coalesce(s.straincompass_slug, ''), coalesce(s.straincompass_updated_at, ''), s.thc_min, s.thc_max, s.cbd_min, s.cbd_max, s.cbn_max, s.cbg_max,
 		       s.straincompass_verified, s.straincompass_quality_score, coalesce(s.straincompass_sources, ''), coalesce(s.straincompass_lineage_note, ''),
 		       coalesce(s.height_indoor, ''), coalesce(s.height_outdoor, ''), coalesce(s.yield_indoor, ''), coalesce(s.yield_outdoor, ''),
@@ -315,7 +351,7 @@ func GetStrain(db *sql.DB, id string) types.Strain {
 		FROM strain s
 		JOIN breeder b ON s.breeder_id = b.id
 		WHERE s.id = $1`, id).Scan(
-		&strain.ID, &strain.Name, &strain.ShortDescription, &strain.Breeder, &strain.BreederID, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount, &strain.Description, &strain.CycleTime, &strain.Url, &strain.CannadbURI,
+		&strain.ID, &strain.Name, &strain.ShortDescription, &strain.Breeder, &strain.BreederID, &strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount, &strain.Description, &strain.CycleTime, &strain.CycleTimeMin, &strain.Url, &strain.CannadbURI,
 		&strain.StraincompassSlug, &strain.StraincompassUpdatedAt, &strain.ThcMin, &strain.ThcMax, &strain.CbdMin, &strain.CbdMax, &strain.CbnMax, &strain.CbgMax,
 		&straincompassVerified, &strain.StraincompassQuality, &strain.StraincompassSources, &strain.StraincompassLineageNote,
 		&strain.HeightIndoor, &strain.HeightOutdoor, &strain.YieldIndoor, &strain.YieldOutdoor,
@@ -413,6 +449,7 @@ func AddStrainHandler(c *gin.Context) {
 		Description      string `json:"description"`
 		ShortDescription string             `json:"short_desc"`
 		CycleTime        int                `json:"cycle_time"`
+		CycleTimeMin     int                `json:"cycle_time_min"`
 		Url              string             `json:"url"`
 		SeedLocation     string             `json:"seed_location"`
 		SeedType         string             `json:"seed_type"`
@@ -434,6 +471,11 @@ func AddStrainHandler(c *gin.Context) {
 	var seedTypeOK bool
 	if req.SeedType, seedTypeOK = normalizeSeedType(req.SeedType); !seedTypeOK {
 		apiBadRequest(c, "api_invalid_seed_type")
+		return
+	}
+	cycleTimeMin, ok := normalizeCycleTimeMin(req.CycleTimeMin, req.CycleTime)
+	if !ok {
+		apiBadRequest(c, "api_cycle_time_min_invalid")
 		return
 	}
 	stock, err := resolveStrainStock(req.SeedCount, &req.Wanted, &req.SeedsAddedOn, newStrainStock, stockToday(c))
@@ -479,8 +521,8 @@ func AddStrainHandler(c *gin.Context) {
 	stmt := `
 		INSERT INTO strain (name, breeder_id, indica, sativa, autoflower, seed_count, description, cycle_time, url, short_desc,
 		                    height_indoor, height_outdoor, yield_indoor, yield_outdoor, seed_location, seed_type,
-		                    wanted, seeds_added_on)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id
+		                    wanted, seeds_added_on, cycle_time_min)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19) RETURNING id
 	`
 	//convert autoflower to int
 	var autoflowerInt int
@@ -492,7 +534,7 @@ func AddStrainHandler(c *gin.Context) {
 	var id int
 	err = db.QueryRow(stmt, req.Name, breederID, req.Indica, req.Sativa, autoflowerInt, req.SeedCount, req.Description, req.CycleTime, req.Url, req.ShortDescription,
 		nullableStr(growing.HeightIndoor), nullableStr(growing.HeightOutdoor), nullableStr(growing.YieldIndoor), nullableStr(growing.YieldOutdoor),
-		nullableStr(req.SeedLocation), nullableStr(req.SeedType), stock.Wanted, stock.AddedOn).Scan(&id)
+		nullableStr(req.SeedLocation), nullableStr(req.SeedType), stock.Wanted, stock.AddedOn, cycleTimeMin).Scan(&id)
 	if err != nil {
 		fieldLogger.WithError(err).Error("Failed to insert strain")
 		apiInternalError(c, "api_failed_to_add_strain")
@@ -564,6 +606,7 @@ func UpdateStrainHandler(c *gin.Context) {
 		SeedType     *string             `json:"seed_type"`
 		Wanted       *bool               `json:"wanted"`
 		SeedsAddedOn *string             `json:"seeds_added_on"`
+		CycleTimeMin *int                `json:"cycle_time_min"`
 		Growing      *strainGrowingInfo  `json:"growing"`
 		Cannabinoids *strainCannabinoids `json:"cannabinoids"`
 		Attributes   *struct {
@@ -597,6 +640,14 @@ func UpdateStrainHandler(c *gin.Context) {
 		req.SeedLocation = &trimmed
 		if err := utils.ValidateStringLength("seed_location", trimmed, utils.MaxNameLength); err != nil {
 			apiBadRequest(c, err.Error())
+			return
+		}
+	}
+	var cycleTimeMin any
+	if req.CycleTimeMin != nil {
+		var ok bool
+		if cycleTimeMin, ok = normalizeCycleTimeMin(*req.CycleTimeMin, req.CycleTime); !ok {
+			apiBadRequest(c, "api_cycle_time_min_invalid")
 			return
 		}
 	}
@@ -690,6 +741,12 @@ func UpdateStrainHandler(c *gin.Context) {
 	}
 	if err == nil {
 		_, err = tx.Exec("UPDATE strain SET wanted = $1, seeds_added_on = $2 WHERE id = $3", stock.Wanted, stock.AddedOn, id)
+	}
+	if err == nil && req.CycleTimeMin != nil {
+		_, err = tx.Exec("UPDATE strain SET cycle_time_min = $1 WHERE id = $2", cycleTimeMin, id)
+	} else if err == nil {
+		// Range not sent: drop a stored short end the new cycle time no longer exceeds.
+		_, err = tx.Exec("UPDATE strain SET cycle_time_min = NULL WHERE id = $1 AND cycle_time_min >= cycle_time", id)
 	}
 	if err == nil && req.Cannabinoids != nil {
 		cb := req.Cannabinoids
@@ -800,7 +857,7 @@ func getStrainsByView(db *sql.DB, where string) ([]types.Strain, error) {
 	query := `
 		SELECT s.id, s.name, b.name AS breeder, b.id as breeder_id,
 		       s.indica, s.sativa, s.autoflower, s.seed_count, s.description,
-		       coalesce(s.short_desc, ''), coalesce(s.cycle_time, 0), coalesce(s.url, ''),
+		       coalesce(s.short_desc, ''), coalesce(s.cycle_time, 0), coalesce(s.cycle_time_min, 0), coalesce(s.url, ''),
 		       coalesce(s.seed_location, ''), coalesce(s.seed_type, ''), s.wanted, coalesce(s.seeds_added_on, ''),
 		       ` + aggExpr + `
 		FROM strain s
@@ -809,7 +866,7 @@ func getStrainsByView(db *sql.DB, where string) ([]types.Strain, error) {
 		WHERE ` + where + `
 		GROUP BY s.id, s.name, b.name, b.id, s.indica, s.sativa, s.autoflower,
 		         s.seed_count, s.description, s.short_desc, s.cycle_time, s.url, s.seed_location, s.seed_type,
-		         s.wanted, s.seeds_added_on
+		         s.wanted, s.seeds_added_on, s.cycle_time_min
 		ORDER BY s.name ASC
 	`
 
@@ -825,7 +882,7 @@ func getStrainsByView(db *sql.DB, where string) ([]types.Strain, error) {
 		var strain types.Strain
 		if err := rows.Scan(&strain.ID, &strain.Name, &strain.Breeder, &strain.BreederID,
 			&strain.Indica, &strain.Sativa, &strain.Autoflower, &strain.SeedCount,
-			&strain.Description, &strain.ShortDescription, &strain.CycleTime, &strain.Url,
+			&strain.Description, &strain.ShortDescription, &strain.CycleTime, &strain.CycleTimeMin, &strain.Url,
 			&strain.SeedLocation, &strain.SeedType, &strain.Wanted, &strain.SeedsAddedOn, &strain.Lineage); err != nil {
 			fieldLogger.WithError(err).Error("Failed to scan strain")
 			return nil, err

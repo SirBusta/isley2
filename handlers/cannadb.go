@@ -192,15 +192,11 @@ func mapCannadbStrain(rec *cannadbRecord, val *cannadbStrainValue) types.Strain 
 	}
 	indica := 100 - sativa
 
-	// cycleTime is a {min,max} in whole days; Isley stores a single int.
-	// Prefer max, fall back to min.
-	cycleTime := 0
+	// cycleTime is a {min,max} in whole days: the long end is cycle_time,
+	// the short end cycle_time_min when it differs.
+	cycleTime, cycleTimeMin := 0, 0
 	if val.CycleTime != nil {
-		if val.CycleTime.Max != nil {
-			cycleTime = *val.CycleTime.Max
-		} else if val.CycleTime.Min != nil {
-			cycleTime = *val.CycleTime.Min
-		}
+		cycleTime, cycleTimeMin = cycleTimeRange(val.CycleTime.Min, val.CycleTime.Max, 1)
 	}
 
 	return types.Strain{
@@ -211,6 +207,7 @@ func mapCannadbStrain(rec *cannadbRecord, val *cannadbStrainValue) types.Strain 
 		Description:      val.Description, // markdown, stored raw
 		ShortDescription: val.ShortDescription,
 		CycleTime:        cycleTime,
+		CycleTimeMin:     cycleTimeMin,
 		Url:              val.SourceURL,
 		CannadbURI:       rec.URI,
 		CannadbIndexedAt: rec.IndexedAt,

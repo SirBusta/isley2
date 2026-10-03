@@ -252,13 +252,9 @@ func mapStraincompassStrain(rec *straincompassStrain) types.Strain {
 	// weeks"), but Isley's cycle_time is in days (matching CannaDB's
 	// mapping, which is genuinely day-denominated) — so convert. Prefer
 	// max, fall back to min, same preference rule as CannaDB's mapping.
+	// The range's short end is kept too (cycle_time_min) when it differs.
 	const daysPerWeek = 7
-	cycleTime := 0
-	if rec.FloweringTimeMax != nil {
-		cycleTime = *rec.FloweringTimeMax * daysPerWeek
-	} else if rec.FloweringTimeMin != nil {
-		cycleTime = *rec.FloweringTimeMin * daysPerWeek
-	}
+	cycleTime, cycleTimeMin := cycleTimeRange(rec.FloweringTimeMin, rec.FloweringTimeMax, daysPerWeek)
 
 	verified := rec.Verified
 	strain := types.Strain{
@@ -268,6 +264,7 @@ func mapStraincompassStrain(rec *straincompassStrain) types.Strain {
 		Description:              rec.Description, // imported directly, including any third-party copy
 		ShortDescription:         rec.ShortDescription,
 		CycleTime:                cycleTime,
+		CycleTimeMin:             cycleTimeMin,
 		Autoflower:               straincompassIsAutoflower(rec),
 		StraincompassSlug:        rec.Slug,
 		StraincompassUpdatedAt:   rec.UpdatedAt,
@@ -399,7 +396,8 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			    straincompass_sources = $17, straincompass_lineage_note = $18,
 			    height_indoor = COALESCE($19, height_indoor), height_outdoor = COALESCE($20, height_outdoor),
 			    yield_indoor = COALESCE($21, yield_indoor), yield_outdoor = COALESCE($22, yield_outdoor),
-			    autoflower = CASE WHEN $24 = 1 THEN 1 ELSE autoflower END
+			    autoflower = CASE WHEN $24 = 1 THEN 1 ELSE autoflower END,
+			    cycle_time_min = $25
 			WHERE id = $23`,
 			s.Name, breederID, s.Indica, s.Sativa,
 			s.Description, s.ShortDescription, s.CycleTime,
@@ -407,7 +405,7 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			s.CbdMin, s.CbdMax, s.CbnMax, s.CbgMax,
 			verified, s.StraincompassQuality,
 			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote),
-			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), id, autoflower)
+			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), id, autoflower, nullableInt(s.CycleTimeMin))
 		return id, uerr
 	case errors.Is(err, sql.ErrNoRows):
 		ierr := db.QueryRow(`
@@ -417,8 +415,8 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			                    thc_min, thc_max, cbd_min, cbd_max, cbn_max, cbg_max,
 			                    straincompass_verified, straincompass_quality_score,
 			                    straincompass_sources, straincompass_lineage_note,
-			                    height_indoor, height_outdoor, yield_indoor, yield_outdoor)
-			VALUES ($1, $2, $3, $4, $24, 0, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+			                    height_indoor, height_outdoor, yield_indoor, yield_outdoor, cycle_time_min)
+			VALUES ($1, $2, $3, $4, $24, 0, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $25)
 			RETURNING id`,
 			s.Name, breederID, s.Indica, s.Sativa,
 			s.Description, s.ShortDescription, s.CycleTime,
@@ -426,7 +424,7 @@ func upsertStraincompassStrain(db *sql.DB, breederID int, s types.Strain) (int, 
 			s.ThcMin, s.ThcMax, s.CbdMin, s.CbdMax, s.CbnMax, s.CbgMax,
 			verified, s.StraincompassQuality,
 			nullableStr(s.StraincompassSources), nullableStr(s.StraincompassLineageNote),
-			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), autoflower).Scan(&id)
+			nullableStr(s.HeightIndoor), nullableStr(s.HeightOutdoor), nullableStr(s.YieldIndoor), nullableStr(s.YieldOutdoor), autoflower, nullableInt(s.CycleTimeMin)).Scan(&id)
 		return id, ierr
 	default:
 		return 0, err

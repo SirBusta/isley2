@@ -163,7 +163,9 @@ document.addEventListener("DOMContentLoaded", () => {
     // in days and shown in weeks with one decimal only when needed.
     function cycleInfo(s) {
         if (!(s.cycle_time > 0)) return "";
-        const weeks = String(Math.round(s.cycle_time / 7 * 10) / 10);
+        const toWeeks = (days) => String(Math.round(days / 7 * 10) / 10);
+        // A range shows both ends ("8–10 wk"); sorting uses the long end.
+        const weeks = (s.cycle_time_min > 0 && s.cycle_time_min < s.cycle_time ? toWeeks(s.cycle_time_min) + "–" : "") + toWeeks(s.cycle_time);
         const text = (s.autoflower ? lcl.seedToHarvestShort : lcl.weeksShort).replace("%s", weeks);
         const title = s.autoflower ? lcl.seedToHarvest : lcl.floweringTime;
         return `<span class="sc-cycle text-muted" title="${esc(title)}"><i class="fa-solid fa-clock me-1"></i>${esc(text)}</span>`;
