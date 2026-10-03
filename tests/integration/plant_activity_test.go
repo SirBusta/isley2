@@ -126,6 +126,45 @@ func TestActivity_EditUpdatesRow(t *testing.T) {
 	assert.Equal(t, fix.FeedID, actName)
 }
 
+// TestActivity_EditAcceptsMinutePrecisionDate reproduces the "changing
+// the activity type doesn't save" report: a browser's datetime-local input
+// drops the seconds whenever they are zero ("2026-10-03T09:00"), which the
+// edit handler used to reject — and the page reloaded without showing the
+// error, so the type change appeared to silently revert.
+func TestActivity_EditAcceptsMinutePrecisionDate(t *testing.T) {
+	t.Parallel()
+
+	db := testutil.NewTestDB(t)
+	server := testutil.NewTestServer(t, db)
+	fix := seedActivityHTTP(t, db)
+	testutil.SeedAdmin(t, db, "activity-edit-pw")
+
+	res, err := db.Exec(
+		`INSERT INTO plant_activity (plant_id, activity_id, note, date) VALUES ($1, $2, 'a note', '2026-10-03T09:00:00')`,
+		fix.PlantID, fix.FeedID,
+	)
+	require.NoError(t, err)
+	actID, _ := res.LastInsertId()
+
+	c, token := server.LoginAndFetchCSRF(t, "activity-edit-pw", "/plants")
+	resp := c.SessionPostJSON(t, "/plantActivity/edit", token, map[string]interface{}{
+		"id":          actID,
+		"date":        "2026-10-03T09:00",
+		"activity_id": fix.WaterID,
+		"note":        "a note",
+	})
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var activityID int
+	var date string
+	require.NoError(t, db.QueryRow(
+		`SELECT activity_id, date FROM plant_activity WHERE id = $1`, actID,
+	).Scan(&activityID, &date))
+	assert.Equal(t, fix.WaterID, activityID)
+	assert.Contains(t, date, "09:00:00", "seconds must be filled in so the stored date parses back")
+}
+
 // ---------------------------------------------------------------------------
 // DELETE /plantActivity/delete/:id
 // ---------------------------------------------------------------------------

@@ -62,9 +62,17 @@ document.addEventListener("DOMContentLoaded", () => {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
         })
-            .then(response => response.json())
-            .then(() => location.reload())
-            .catch(err => uiMessages.showToast(uiMessages.t('failed_to_update_activity'), 'danger'));
+            .then(async response => {
+                // Don't reload on a rejected save: the reload would hide the
+                // error and make it look as if the change silently vanished.
+                if (!response.ok) {
+                    let serverMsg = "";
+                    try { const data = await response.json(); serverMsg = (data && data.error) || ""; } catch (e) {}
+                    throw new Error(serverMsg);
+                }
+                location.reload();
+            })
+            .catch(err => uiMessages.showToast((err && err.message) || uiMessages.t('failed_to_update_activity'), 'danger'));
     });
 
     deleteActivityButton.addEventListener("click", () => {

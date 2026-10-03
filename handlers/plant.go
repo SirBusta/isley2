@@ -113,6 +113,7 @@ func AddPlant(c *gin.Context) {
 	}
 	defer tx.Rollback() // no-op after Commit
 
+	input.Date = utils.NormalizeDateTimeLocal(input.Date)
 	plantID := 0
 	err = tx.QueryRow("INSERT INTO plant (name, zone_id, strain_id, description, clone, parent_plant_id, start_dt, sensors) VALUES ($1, $2, $3, '', $4, NULLIF($5, 0), $6, '[]') RETURNING id", input.Name, *input.ZoneID, *input.StrainID, input.Clone, input.ParentID, input.Date).Scan(&plantID)
 	if err != nil {
@@ -1028,6 +1029,9 @@ func UpdatePlant(c *gin.Context) {
 	if input.IsClone {
 		isClone = 1
 	}
+
+	input.StartDT = utils.NormalizeDateTimeLocal(input.StartDT)
+	input.Date = utils.NormalizeDateTimeLocal(input.Date)
 
 	//Update the plant
 	_, err := db.Exec("UPDATE plant SET name = $1, description = $2, zone_id = $3, strain_id = $4, clone = $5, start_dt = $6, harvest_weight = $7 WHERE id = $8", input.PlantName, input.PlantDescription, input.ZoneID, input.StrainID, isClone, input.StartDT, input.HarvestWeight, input.PlantID)

@@ -9,6 +9,19 @@ const (
 	LayoutDB            = "2006-01-02 15:04:05" // Raw DB string queries
 )
 
+// NormalizeDateTimeLocal adds the missing ":00" seconds to a minute-precision
+// datetime-local value ("2006-01-02T15:04"). Browsers omit the seconds from
+// an <input type="datetime-local" step="1"> whenever they are zero, but the
+// rest of the app stores and parses LayoutDateTimeLocal with seconds, so the
+// short form would fail validation or be read back as a zero date. Any other
+// value is returned unchanged.
+func NormalizeDateTimeLocal(value string) string {
+	if _, err := time.Parse("2006-01-02T15:04", value); err == nil {
+		return value + ":00"
+	}
+	return value
+}
+
 // IsZeroDate reports whether t is the zero/null sentinel (zero value or 1970-01-01).
 func IsZeroDate(t time.Time) bool {
 	return t.IsZero() || t.Year() == 1970

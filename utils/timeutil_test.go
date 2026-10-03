@@ -61,6 +61,22 @@ func TestAsLocal_AlreadyLocalIsNoOp(t *testing.T) {
 	assert.Equal(t, time.Local, got.Location())
 }
 
+func TestNormalizeDateTimeLocal(t *testing.T) {
+	t.Parallel()
+	cases := map[string]string{
+		"2026-10-03T09:00":    "2026-10-03T09:00:00",
+		"2026-10-03T09:00:00": "2026-10-03T09:00:00",
+		"2026-10-03T09:00:42": "2026-10-03T09:00:42",
+		"2026-10-03":          "2026-10-03",
+		"2026-10-03 09:00:00": "2026-10-03 09:00:00",
+		"":                    "",
+		"not a date":          "not a date",
+	}
+	for in, want := range cases {
+		assert.Equal(t, want, NormalizeDateTimeLocal(in), "input %q", in)
+	}
+}
+
 // TestLayoutConstants_AreParseable acts as a smoke check on the
 // formatting constants — all four must be parseable by time.Parse.
 func TestLayoutConstants_AreParseable(t *testing.T) {

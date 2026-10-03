@@ -25,6 +25,7 @@ func EditStatus(c *gin.Context) {
 		return
 	}
 
+	input.Date = utils.NormalizeDateTimeLocal(input.Date)
 	if err := utils.ValidateDate("date", input.Date); err != nil {
 		apiBadRequest(c, err.Error())
 		return

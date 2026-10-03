@@ -17,6 +17,7 @@ func updatePlantStatusLog(db *sql.DB, plantID int, statusID int, date string) (b
 	if date == "" {
 		date = time.Now().Format(utils.LayoutDateTimeLocal)
 	}
+	date = utils.NormalizeDateTimeLocal(date)
 
 	var currentStatus int
 	err := db.QueryRow("SELECT status_id FROM plant_status_log WHERE plant_id = $1 ORDER BY date DESC LIMIT 1", plantID).Scan(&currentStatus)

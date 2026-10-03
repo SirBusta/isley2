@@ -84,6 +84,7 @@ func CreatePlantActivity(c *gin.Context) {
 		apiBadRequest(c, err.Error())
 		return
 	}
+	input.Date = utils.NormalizeDateTimeLocal(input.Date)
 	if err := utils.ValidateDate("date", input.Date); err != nil {
 		apiBadRequest(c, err.Error())
 		return
@@ -145,6 +146,7 @@ func EditActivity(c *gin.Context) {
 		apiBadRequest(c, err.Error())
 		return
 	}
+	input.Date = utils.NormalizeDateTimeLocal(input.Date)
 	if err := utils.ValidateDate("date", input.Date); err != nil {
 		apiBadRequest(c, err.Error())
 		return
@@ -278,6 +280,7 @@ func RecordMultiPlantActivity(c *gin.Context) {
 		apiBadRequest(c, err.Error())
 		return
 	}
+	request.Date = utils.NormalizeDateTimeLocal(request.Date)
 	if err := utils.ValidateDate("date", request.Date); err != nil {
 		apiBadRequest(c, err.Error())
 		return
